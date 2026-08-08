@@ -39,10 +39,29 @@ DERMATOLOGY_SPECIALITY_PARAM = "Kulit & Kelamin"
 
 # Jabodetabek branch name fragments, matched against the listing card's
 # "Hospital" table cell text.
+#
+# REAL BUG (found via dashboard review 2026-08-09): "kuningan" was
+# missing from this list. "Mayapada Hospital Kuningan" is a real,
+# distinct Jabodetabek branch (Kuningan/Mega Kuningan area, South
+# Jakarta -- NOT Kuningan, West Java) confirmed present in ALL 5 cached
+# listing pages with dermatologists, but every one of those doctors was
+# silently filtered out here because the branch name doesn't contain
+# "jakarta"/"tangerang"/"bogor" -- it was only ever called "Kuningan" on
+# the site, never "Jakarta Kuningan" or similar. This made the
+# corresponding registry hospital (Rumah Sakit Mayapada Kuningan)
+# wrongly show confirmed_zero (opportunity_score=1.0) despite being a
+# well-known hospital that obviously has a dermatology clinic. User
+# confirmed https://mayapadahospital.com/find-doctor/show?location=4
+# (Kuningan's location filter) returns 4 dermatologists. NOTE: "Mayapada
+# Medical Center Kuningan" is a DIFFERENT, separate facility (a clinic,
+# not the hospital) -- user explicitly said not to assume dermatologists
+# practice there too, so it is NOT added as a hint here; only the actual
+# "Mayapada Hospital Kuningan" branch name match is affected by this fix.
 _JABODETABEK_BRANCH_HINTS = [
     "jakarta",
     "tangerang",
     "bogor",
+    "kuningan",
 ]
 
 _KNOWN_NON_JABODETABEK_BRANCHES = [
