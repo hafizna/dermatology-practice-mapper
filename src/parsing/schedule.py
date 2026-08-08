@@ -497,6 +497,14 @@ def _parse_mayapada(entries: list[dict]) -> list[ParsedScheduleSlot]:
     return _parse_freetext_day_time(entries, source="mayapada")
 
 
+def _parse_sari_asih(entries: list[dict]) -> list[ParsedScheduleSlot]:
+    return _parse_freetext_day_time(entries, source="sari_asih")
+
+
+def _parse_rs_premier(entries: list[dict]) -> list[ParsedScheduleSlot]:
+    return _parse_freetext_day_time(entries, source="rs_premier")
+
+
 def _parse_primaya_day_rows(day_rows) -> list[ParsedScheduleSlot]:
     """Shared per-.schedule-day-row parsing, used by both the flat
     _parse_primaya() and the branch-aware
@@ -558,6 +566,8 @@ _SOURCE_PARSERS = {
     "brawijaya": _parse_brawijaya,
     "bethsaida": _parse_bethsaida,
     "mayapada": _parse_mayapada,
+    "sari_asih": _parse_sari_asih,
+    "rs_premier": _parse_rs_premier,
     "primaya": _parse_primaya,
     # "eka" intentionally absent — that source never has schedule data
     # (spec §3.1: absence must stay absent, not default to some shape).

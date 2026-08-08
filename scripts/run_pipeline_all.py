@@ -36,6 +36,8 @@ from src.scrapers.mitra_keluarga import MitraKeluargaScraper
 from src.scrapers.pipeline import persist_raw_doctor_records
 from src.scrapers.primaya import PrimayaScraper
 from src.scrapers.rs_pondok_indah import RsPondokIndahScraper
+from src.scrapers.rs_premier import RsPremierScraper
+from src.scrapers.sari_asih import SariAsihScraper
 from src.scrapers.siloam import SiloamScraper
 
 # (source key, adapter, preferred_rank_group as stored in Hospital rows)
@@ -49,6 +51,8 @@ NETWORK_SOURCES = [
     ("bethsaida", BethsaidaScraper, "Bethsaida"),
     ("rs_pondok_indah", RsPondokIndahScraper, "RS Pondok Indah"),
     ("brawijaya", BrawijayaScraper, "Brawijaya"),
+    ("sari_asih", SariAsihScraper, "Sari Asih"),
+    ("rs_premier", RsPremierScraper, "RS Premier"),
 ]
 
 

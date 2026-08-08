@@ -4,8 +4,8 @@ Maps group_name -> adapter class. src/cli.py `scrape` dispatches through
 this module so new adapters only need to register here, not touch the CLI.
 
 Two adapter shapes are supported:
-- Network adapters (BaseScraper subclasses: Siloam, Mitra Keluarga,
-  Hermina, Primaya) — instantiated then call .fetch_all_dermatology_doctors().
+- Network adapters (BaseScraper subclasses) — instantiated then call
+  .fetch_all_dermatology_doctors().
 - Manual-snapshot adapters (Eka — see src/scrapers/eka.py) — a plain
   module exposing a module-level fetch_all_dermatology_doctors()
   function, no HTTP involved, no BaseScraper subclass needed.
@@ -24,6 +24,8 @@ from src.scrapers.mayapada import MayapadaScraper
 from src.scrapers.mitra_keluarga import MitraKeluargaScraper
 from src.scrapers.primaya import PrimayaScraper
 from src.scrapers.rs_pondok_indah import RsPondokIndahScraper
+from src.scrapers.rs_premier import RsPremierScraper
+from src.scrapers.sari_asih import SariAsihScraper
 from src.scrapers.siloam import SiloamScraper
 
 log = get_logger(__name__)
@@ -41,6 +43,8 @@ ADAPTERS: dict[str, object] = {
     "bethsaida": BethsaidaScraper,
     "rs_pondok_indah": RsPondokIndahScraper,
     "brawijaya": BrawijayaScraper,
+    "sari_asih": SariAsihScraper,
+    "rs_premier": RsPremierScraper,
     "eka": eka_module,  # manual snapshot, not a BaseScraper subclass
 }
 

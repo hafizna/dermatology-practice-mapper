@@ -25,32 +25,22 @@ Key design decisions:
   per-source dispatch pattern already used in src/parsing/schedule.py's
   _SOURCE_PARSERS.
 
-Known registry gaps (investigated 2026-08-08, run via
-scripts/run_pipeline_all.py against all 10 adapters): a number of
+Known registry gaps (last reviewed 2026-08-09 via
+scripts/run_pipeline_all.py against all 12 adapters): a number of
 scraper-reported branch names have NO plausible match in the Fase 1
 OSM-derived registry at all — these are genuine gaps, not matching bugs,
 confirmed by searching the registry for every plausible substring
 (city/area name, brand fragment) and finding nothing at that location.
 Left as documented hospital_unmatched counts rather than guessed:
-MRCCC Siloam Hospitals Semanggi, Siloam Hospitals Agora Cempaka Putih,
-Siloam Hospitals Bogor, Siloam Specialist Center Senayan, Siloam Heart
-Hospital, Hermina Ciledug, Mitra Keluarga Grand Wisata, RS EMC Grha
-Kedoya (a real hospital IS present in the registry as "RS GRHA KEDOYA"
-untagged with any preferred_rank_group — a coordinate-based match
-strongly suggests it's the same institution, but the user explicitly
-declined tagging it as EMC on 2026-08-08, so it deliberately stays
-untagged), Brawijaya Hospital - Antasari/Depok/Tangerang, Bethsaida
-Gading Serpong, RSIA Eka Hospital PIK/Pluit, EKA Hospital Bekasi/Depok/
-MT Haryono/Permata Hijau, and 2 of Mayapada's 3 unmatched branches
-(Jakarta Selatan/Jakarta Timur — the registry does have a 3rd bare-named
-"Mayapada Hospital" entry near Kuningan/South Jakarta that's PLAUSIBLY
-one of these, but wasn't given an override: no address confirms it, and
-it's ambiguous between two scraper-reported branch names). Mayapada
-Hospital Tangerang WAS confirmed by address match but was not overridden
-either, because the registry has two identical bare "Mayapada Hospital"
-name rows with no way to key an override by name alone without an
-unstable database ID — see git history for the ID-sentinel approach that
-was tried and deliberately backed out for that reason.
+Siloam Hospitals Agora Cempaka Putih/Bogor, Siloam Specialist Center
+Senayan, Siloam Heart Hospital, Hermina Ciledug, Mitra Keluarga Grand
+Wisata, Brawijaya Hospital - Antasari/Tangerang, RS Sari Asih Bintaro,
+RSIA Eka Hospital PIK/Pluit, EKA Hospital Bekasi/Depok/MT Haryono/
+Permata Hijau, several Primaya branches, and Mayapada Hospital Jakarta
+Selatan/Jakarta Timur. Confirmed non-obvious links are handled narrowly
+in config/manual_overrides.csv: MRCCC Semanggi, EMC Grha Kedoya,
+Bethsaida Gading Serpong, Mayapada Tangerang, Brawijaya Depok, and the
+non-preferred UKRIDA Hospital records reported by Primaya.
 """
 
 from __future__ import annotations
@@ -138,6 +128,16 @@ def _hospital_names_brawijaya(record: RawDoctorRecord) -> list[str]:
     return [name] if name else []
 
 
+def _hospital_names_sari_asih(record: RawDoctorRecord) -> list[str]:
+    name = record.raw_payload.get("card", {}).get("branch", "")
+    return [name] if name else []
+
+
+def _hospital_names_rs_premier(record: RawDoctorRecord) -> list[str]:
+    name = record.raw_payload.get("branch_name", "")
+    return [name] if name else []
+
+
 def _hospital_names_primaya(record: RawDoctorRecord) -> list[str]:
     # card.location is a bare city/area name (e.g. "Bekasi"), NOT a full
     # hospital name — unusable for hospital-row matching. The real branch
@@ -179,6 +179,8 @@ _HOSPITAL_NAME_EXTRACTORS = {
     "bethsaida": _hospital_names_bethsaida,
     "rs_pondok_indah": _hospital_names_rs_pondok_indah,
     "brawijaya": _hospital_names_brawijaya,
+    "sari_asih": _hospital_names_sari_asih,
+    "rs_premier": _hospital_names_rs_premier,
     "primaya": _hospital_names_primaya,
     "eka": _hospital_names_eka,
 }
@@ -304,6 +306,29 @@ def match_hospital_by_name(
 
     if raw_hospital_name in _HOSPITAL_NAME_ALIAS_OVERRIDES:
         normalized_target = _HOSPITAL_NAME_ALIAS_OVERRIDES[raw_hospital_name]
+        # A manual alias is an explicit human-confirmed cross-source link,
+        # so it must bypass the adapter's preferred-group candidate filter.
+        # Real case: Primaya's official output includes two doctors whose
+        # practice location is the separate, non-preferred "UKRIDA Hospital
+        # (Jakarta Barat)".  Its confirmed registry target intentionally has
+        # preferred_rank_group=None; applying preferred_group="Primaya"
+        # after resolving the alias made the override impossible to match.
+        # Coordinate-qualified aliases already bypass the group restriction
+        # via _resolve_coord_alias() above.  Bare aliases are required to do
+        # the same; duplicate raw target names must use the coordinate form.
+        exact_candidates = session.execute(
+            select(Hospital).where(Hospital.name_normalized == normalized_target)
+        ).scalars().all()
+        if len(exact_candidates) == 1:
+            return exact_candidates[0]
+        if len(exact_candidates) > 1:
+            log.warning(
+                "hospital_name_alias_target_ambiguous",
+                raw_hospital_name=raw_hospital_name,
+                normalized_target=normalized_target,
+                candidate_count=len(exact_candidates),
+            )
+            return None
     else:
         normalized_target = normalize_hospital_name(raw_hospital_name)
     if not normalized_target:

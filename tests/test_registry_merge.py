@@ -111,15 +111,14 @@ def test_load_preferred_group_overrides_reads_real_csv():
     # entries were left preferred_rank_group=None even though a human
     # can confirm which brand they belong to by location —
     # config/manual_overrides.csv is the sanctioned Tier-3 correction
-    # mechanism (spec) for exactly this. Note: "RS GRHA KEDOYA" was
-    # investigated too (plausibly EMC's Kedoya branch by coordinate) but
-    # the user explicitly declined that override, so it deliberately
-    # stays untagged/its own entry — not every plausible match gets
-    # auto-applied.
+    # mechanism (spec) for exactly this. Note: the user reversed the
+    # earlier decision about "RS GRHA KEDOYA" on 2026-08-09 after its
+    # coordinate was confirmed as EMC Grha Kedoya, so that override must
+    # now remain applied as a regression guard too.
     overrides = _load_preferred_group_overrides()
     assert overrides.get("pondok indah") == "RS Pondok Indah"
     assert overrides.get("puri indah pondok indah") == "RS Pondok Indah"
-    assert "grha kedoya" not in overrides
+    assert overrides.get("grha kedoya") == "EMC"
 
 
 def test_load_duplicate_overrides_reads_real_csv():

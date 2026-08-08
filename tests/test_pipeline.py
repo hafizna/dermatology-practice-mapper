@@ -241,6 +241,31 @@ def test_match_uses_coordinate_qualified_alias_for_mayapada_tangerang(db_session
     assert result.id == tangerang.id
 
 
+def test_manual_name_alias_bypasses_adapter_preferred_group_filter(db_session):
+    # Primaya's own output can list practice at the separate UKRIDA
+    # Hospital.  The user explicitly chose to keep UKRIDA outside every
+    # preferred group while still linking its two known dermatologists.
+    # The explicit alias must therefore win over preferred_group="Primaya".
+    from src.parsing.hospital_names import normalize_hospital_name
+
+    ukrida = Hospital(
+        name="RS Ukrida Duri Kepa",
+        name_normalized=normalize_hospital_name("RS Ukrida Duri Kepa"),
+        aliases_json="[]",
+        preferred_rank_group=None,
+    )
+    db_session.add(ukrida)
+    db_session.flush()
+
+    result = match_hospital_by_name(
+        db_session,
+        "UKRIDA Hospital (Jakarta Barat)",
+        preferred_group="Primaya",
+    )
+    assert result is not None
+    assert result.id == ukrida.id
+
+
 # --- persist_doctor_record: credential gate -------------------------------
 
 
