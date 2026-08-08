@@ -18,14 +18,15 @@ automated Tier 1 fetch even though the underlying site IS Tier 1/official),
 and scraped_at is the snapshot date embedded in the directory name, not
 "now" — the data is only as fresh as the last manual upload.
 
-Known limitation (confirmed 2026-08-08): the listing page gives doctor
-name, credentials-in-name, and hospital branch, but NOT practice
-schedule (day/time). Fase 4 parsing will need to leave ScheduleSlot rows
-empty/absent for Eka doctors and mark hospital.data_status='partial'
-rather than 'complete' — schedule data would require also manually
-saving each doctor's individual profile page, which the user has not
-done (and may not, given the volume — 35 doctors nationwide as of the
-2026-08-08 snapshot).
+Correction confirmed from the 2026-08-09 browser export: when the
+``Tampilkan Semua Jadwal`` toggle is enabled, the listing HTML DOES
+contain day/time rows inside each ``.doctor-card``. An earlier parser
+only walked the profile link inside the card, so it missed the schedule
+siblings and incorrectly persisted zero Eka schedule rows. The parser
+now keeps each visible schedule attached to the card's explicitly
+selected branch. For a doctor listed at several branches, the snapshot
+only proves the visible selected branch's schedule; schedules are never
+copied to an unselected branch.
 
 To refresh: user re-saves the page as "Web Page, Complete" from a normal
 browser (this bypasses the bot challenge because it's a real human
@@ -115,14 +116,47 @@ def find_latest_snapshot() -> EkaSnapshotInfo | None:
 def _parse_doctor_cards(html: str) -> list[dict]:
     tree = HTMLParser(html)
     cards: list[dict] = []
-    for card in tree.css('[data-testid="link-profile-doctor"]'):
-        name_node = card.css_first('[data-testid="doctor-name"]')
-        location_node = card.css_first('[data-testid="doctor-location"]')
+    # The browser export wraps the profile link and its schedule panel in
+    # one .doctor-card. Keep a link-only fallback for old/minimal files.
+    containers = tree.css(".doctor-card") or tree.css('[data-testid="link-profile-doctor"]')
+    for container in containers:
+        profile = container.css_first('[data-testid="link-profile-doctor"]')
+        name_node = container.css_first('[data-testid="doctor-name"]')
+        location_node = container.css_first('[data-testid="doctor-location"]')
+        selected_node = container.css_first('[data-testid="selected-doctor-location"]')
+        location = (location_node.text(separator=" ", strip=True) if location_node else "").strip()
+        selected_location = (
+            selected_node.text(separator=" ", strip=True)
+            if selected_node
+            else location if "," not in location else ""
+        ).strip()
+
+        schedule_entries: list[dict] = []
+        for day_node in container.css('[data-testid="doctor-schedule-day"]'):
+            # day_node -> day wrapper -> flex row. A day row can carry
+            # multiple time nodes when the doctor has split sessions.
+            row = day_node.parent.parent if day_node.parent and day_node.parent.parent else None
+            if row is None:
+                continue
+            day_text = day_node.text(separator=" ", strip=True)
+            for time_node in row.css('[data-testid="doctor-schedule-times"]'):
+                time_text = time_node.text(separator=" ", strip=True)
+                if day_text and time_text:
+                    schedule_entries.append(
+                        {
+                            "hospital": selected_location,
+                            "day_text": day_text,
+                            "time_text": time_text,
+                        }
+                    )
+
         cards.append(
             {
                 "name": (name_node.text(strip=True) if name_node else "").strip(),
-                "location": (location_node.text(strip=True) if location_node else "").strip(),
-                "url": card.attributes.get("href"),
+                "location": location,
+                "selected_location": selected_location,
+                "schedule_entries": schedule_entries,
+                "url": profile.attributes.get("href") if profile else None,
             }
         )
     return cards
@@ -161,7 +195,7 @@ def fetch_all_dermatology_doctors(*, jabodetabek_only: bool = True) -> list[RawD
             RawDoctorRecord(
                 raw_name=card["name"],
                 raw_credentials_text=card["name"],  # credentials embedded in name string
-                raw_schedule_entries=[],  # NOT AVAILABLE from this source — see module docstring
+                raw_schedule_entries=card["schedule_entries"],
                 source_url=card["url"] or "",
                 raw_payload={
                     "card": card,

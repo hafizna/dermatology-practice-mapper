@@ -401,7 +401,6 @@ def test_returns_none_for_single_branch_sources():
     # "this doctor has no schedule".
     assert parse_schedule_entries_by_hospital([], source="siloam") is None
     assert parse_schedule_entries_by_hospital([], source="emc") is None
-    assert parse_schedule_entries_by_hospital([], source="eka") is None
 
 
 def test_hermina_by_hospital_keeps_branches_separate():
@@ -477,13 +476,34 @@ def test_primaya_by_hospital_empty_html_returns_empty_dict():
     assert parse_schedule_entries_by_hospital([{"raw_html": ""}], source="primaya") == {}
 
 
-def test_eka_never_dispatched_no_parser_registered():
-    # Eka has no schedule data by design (manual listing-only snapshot —
-    # see src/scrapers/eka.py). Passing entries for source="eka" should
-    # fall through to the unrecognized-source low-confidence path, not
-    # silently invent a shape.
-    slots = parse_schedule_entries([], source="eka")
-    assert slots == []
+def test_eka_visible_schedule_entry_is_parsed():
+    entries = [
+        {
+            "hospital": "EKA Hospital BSD",
+            "day_text": "Selasa",
+            "time_text": "16:30 - 20:00",
+        }
+    ]
+    slots = parse_schedule_entries(entries, source="eka")
+    assert len(slots) == 1
+    assert (slots[0].day_of_week, slots[0].start_time, slots[0].end_time) == (
+        1,
+        "16:30",
+        "20:00",
+    )
+
+
+def test_eka_by_hospital_does_not_copy_selected_schedule_to_other_branch():
+    entries = [
+        {
+            "hospital": "RSIA Eka Hospital PIK",
+            "day_text": "Sabtu",
+            "time_text": "08:00 - 10:00",
+        }
+    ]
+    by_hospital = parse_schedule_entries_by_hospital(entries, source="eka")
+    assert set(by_hospital) == {"RSIA Eka Hospital PIK"}
+    assert by_hospital["RSIA Eka Hospital PIK"][0].day_of_week == 5
 
 
 def test_missing_day_field_is_low_confidence_not_dropped():

@@ -31,8 +31,9 @@ structure differs completely per source:
                             genuine multi-session day, not ambiguous
                             (has an explicit "dan"/"and" separator), so
                             this one CAN be split into two slots safely.
-    Eka                  : no schedule data at all (manual snapshot,
-                            listing-only source — see src/scrapers/eka.py).
+    Eka (manual HTML)    : free-text day/time rows inside each doctor
+                            card, tagged with the branch currently
+                            selected in the saved page.
 
 This module provides:
 - normalize_day_of_week(): maps any of the day representations above to
@@ -513,6 +514,10 @@ def _parse_radjak(entries: list[dict]) -> list[ParsedScheduleSlot]:
     return _parse_freetext_day_time(entries, source="radjak")
 
 
+def _parse_eka(entries: list[dict]) -> list[ParsedScheduleSlot]:
+    return _parse_freetext_day_time(entries, source="eka")
+
+
 def _parse_primaya_day_rows(day_rows) -> list[ParsedScheduleSlot]:
     """Shared per-.schedule-day-row parsing, used by both the flat
     _parse_primaya() and the branch-aware
@@ -578,9 +583,8 @@ _SOURCE_PARSERS = {
     "rs_premier": _parse_rs_premier,
     "columbia_asia": _parse_columbia_asia,
     "radjak": _parse_radjak,
+    "eka": _parse_eka,
     "primaya": _parse_primaya,
-    # "eka" intentionally absent — that source never has schedule data
-    # (spec §3.1: absence must stay absent, not default to some shape).
 }
 
 
@@ -596,9 +600,8 @@ _SOURCE_PARSERS = {
 # branch A's schedule to branch B's Doctor row too. This dispatch table
 # preserves the branch boundary the raw payload already has.
 #
-# Sources not listed here either report exactly one hospital per record
-# (so the flat parser is already branch-correct) or have no schedule
-# data at all (Eka).
+# Sources not listed here report exactly one hospital per record, so the
+# flat parser is already branch-correct.
 
 
 def _parse_hermina_by_hospital(entries: list[dict]) -> dict[str, list[ParsedScheduleSlot]]:
@@ -650,10 +653,28 @@ def _parse_primaya_by_hospital(entries: list[dict]) -> dict[str, list[ParsedSche
     return result
 
 
+def _parse_eka_by_hospital(entries: list[dict]) -> dict[str, list[ParsedScheduleSlot]]:
+    """Keep schedules on the branch selected in the saved listing.
+
+    A card may list several practice locations while rendering the
+    schedule for only one selected location. Grouping by the explicit
+    ``hospital`` tag prevents that visible schedule from being copied to
+    the other branches.
+    """
+    result: dict[str, list[ParsedScheduleSlot]] = {}
+    for entry in entries:
+        hospital_name = entry.get("hospital", "")
+        if not hospital_name:
+            continue
+        result.setdefault(hospital_name, []).extend(_parse_eka([entry]))
+    return result
+
+
 _SOURCE_PARSERS_BY_HOSPITAL = {
     "hermina": _parse_hermina_by_hospital,
     "rs_pondok_indah": _parse_rspi_by_hospital,
     "primaya": _parse_primaya_by_hospital,
+    "eka": _parse_eka_by_hospital,
 }
 
 

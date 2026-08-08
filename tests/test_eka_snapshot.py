@@ -82,11 +82,36 @@ def test_jabodetabek_filter_excludes_pekanbaru(eka_manual_uploads):
     assert "dr. Anonim Contoh Tigabelas, Sp.DV" not in names
 
 
-def test_schedule_is_always_empty_not_guessed(eka_manual_uploads):
-    # This source never has schedule data (spec §3.1: don't fake it).
+def test_visible_schedule_is_extracted_from_each_doctor_card(eka_manual_uploads):
     records = fetch_all_dermatology_doctors(jabodetabek_only=True)
-    for r in records:
-        assert r.raw_schedule_entries == []
+    mt_haryono = next(r for r in records if "Duabelas" in r.raw_name)
+    assert mt_haryono.raw_schedule_entries == [
+        {
+            "hospital": "EKA Hospital MT Haryono",
+            "day_text": "Selasa",
+            "time_text": "16:30 - 20:00",
+        },
+        {
+            "hospital": "EKA Hospital MT Haryono",
+            "day_text": "Selasa",
+            "time_text": "20:15 - 21:00",
+        },
+    ]
+
+
+def test_multibranch_card_tags_schedule_only_with_selected_branch(eka_manual_uploads):
+    records = fetch_all_dermatology_doctors(jabodetabek_only=True)
+    pik_pluit = next(r for r in records if "Empatbelas" in r.raw_name)
+    assert pik_pluit.raw_payload["card"]["location"] == (
+        "RSIA Eka Hospital PIK, RSIA Eka Hospital Pluit"
+    )
+    assert pik_pluit.raw_schedule_entries == [
+        {
+            "hospital": "RSIA Eka Hospital PIK",
+            "day_text": "Sabtu",
+            "time_text": "08:00 - 10:00",
+        }
+    ]
 
 
 def test_provenance_includes_snapshot_date(eka_manual_uploads):

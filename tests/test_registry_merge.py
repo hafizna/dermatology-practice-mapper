@@ -203,6 +203,10 @@ def test_load_display_alias_overrides_reads_real_csv():
     entries = _load_display_alias_overrides()
     names = {(e[0], e[3]) for e in entries}
     assert ("Rumah Sakit Siloam", "MRCCC Siloam Semanggi") in names
+    assert ("Primaya Hospital", "Primaya Hospital Bekasi Barat") in names
+    assert ("Primaya Hospital", "Primaya Hospital Bekasi Timur") in names
+    assert ("Primaya Hospital", "Primaya Hospital Kelapa Gading") in names
+    assert ("Rumah Sakit Primaya", "Primaya Hospital Pasar Kemis") in names
 
 
 def test_apply_display_alias_overrides_sets_display_alias(in_memory_engine):

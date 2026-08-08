@@ -88,7 +88,10 @@ doctor_schedule_sources:
       normal — TIDAK dipakai karena akan jadi UA spoofing (dilarang §3.6).
       Listing dokter dipasok melalui snapshot browser manual; snapshot terbaru
       2026-08-09 berisi 35 kartu nasional / 32 kartu Jabodetabek dan identik
-      dengan snapshot 2026-08-08. Listing ini tidak memuat jadwal. Revisit
+      dengan snapshot 2026-08-08. Koreksi 2026-08-09: file ini juga memuat
+      jadwal visible ketika toggle "Tampilkan Semua Jadwal" aktif; parser lama
+      melewatkannya karena hanya membaca link di dalam kartu dokter. Jadwal
+      multi-cabang hanya diikat ke cabang yang terpilih pada snapshot. Revisit
       scraping live hanya jika ada jalur akses resmi/izin dari pihak Eka.
   siloam:
     tier: tier_1

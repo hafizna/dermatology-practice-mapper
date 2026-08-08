@@ -59,6 +59,12 @@ from src.models import (
 
 log = get_logger(__name__)
 
+# A zero-doctor branch can only become CONFIRMED_ZERO when its group
+# source is exhaustive at branch level. Primaya's official search is a
+# documented lower-bound feed: pagination breaks while results remain,
+# so absence from that scrape cannot prove a real zero.
+_GROUPS_WITH_INCOMPLETE_DOCTOR_LISTS = frozenset({"Primaya"})
+
 SLOT_MINUTES = 30
 DAY_START_MINUTES = 7 * 60  # 07:00
 DAY_END_MINUTES = 21 * 60  # 21:00
@@ -167,10 +173,9 @@ def compute_supply_metrics(
 
     doctor_ids_at_hospital: the AUTHORITATIVE set of confirmed
     dermatologist Doctor.id values at this hospital, independent of
-    whether any of them have schedule data at all. Required to get
-    n_dermatologists_unique right for a source like Eka (spec: doctor
-    listing only, NEVER has schedule data by design — see
-    src/scrapers/eka.py) — deriving doctor count purely from usable
+    whether any of them have schedule data at all. Required for sources
+    where a listed doctor can have no visible/parseable schedule (a real
+    case in the Eka snapshot) — deriving doctor count purely from usable
     ScheduleSlot rows would wrongly report 0 dermatologists for a
     hospital with real, confirmed doctors just because none of them
     have a parseable schedule. When omitted (e.g. ad-hoc/test calls),
@@ -183,7 +188,22 @@ def compute_supply_metrics(
 
     total_slot_rows = len(all_slots_for_hospital)
     usable = usable_slots_for_hospital(all_slots_for_hospital)
-    metrics.schedule_completeness = (len(usable) / total_slot_rows) if total_slot_rows > 0 else None
+    row_parse_completeness = (len(usable) / total_slot_rows) if total_slot_rows > 0 else None
+
+    # Completeness must also account for listed doctors with no visible
+    # schedule rows. Looking only at parsed/raw slot rows made a branch
+    # with 1 scheduled doctor + 1 schedule-less doctor appear 100%
+    # complete. This is especially visible in the Eka manual snapshot.
+    if doctor_ids_at_hospital:
+        usable_doctor_ids = {slot.doctor_id for slot in usable}
+        doctor_schedule_completeness = len(usable_doctor_ids) / len(doctor_ids_at_hospital)
+        metrics.schedule_completeness = (
+            min(row_parse_completeness, doctor_schedule_completeness)
+            if row_parse_completeness is not None
+            else 0.0
+        )
+    else:
+        metrics.schedule_completeness = row_parse_completeness
 
     if doctor_ids_at_hospital is not None:
         metrics.n_dermatologists_unique = len(doctor_ids_at_hospital)
@@ -344,6 +364,8 @@ def _dermatologist_count_status(
     """
     if n_dermatologists > 0:
         return DermatologistCountStatus.HAS_DOCTORS
+    if hospital.preferred_rank_group in _GROUPS_WITH_INCOMPLETE_DOCTOR_LISTS:
+        return DermatologistCountStatus.UNKNOWN
     if hospital.preferred_rank_group and group_has_any_doctors:
         # We scraped this hospital's group specifically for dermatology
         # and the group's scrape overall succeeded (found doctors

@@ -302,10 +302,10 @@ with tab_heatmap:
 
         if not all_slots:
             st.info(
-                "Tidak ada data jadwal untuk RS ini. Ini bisa berarti: (a) sumber ini "
-                "memang tidak pernah menyediakan data jadwal (mis. Eka Hospital — "
-                "snapshot manual, listing dokter saja), atau (b) RS ini belum pernah "
-                "discrape sama sekali. Lihat tab Data Quality untuk detail per RS."
+                "Tidak ada data jadwal untuk RS ini. Ini bisa berarti: (a) sumber/snapshot "
+                "tidak menampilkan jadwal untuk dokter atau cabang tersebut, atau (b) RS "
+                "ini belum pernah discrape sama sekali. Lihat tab Data Quality untuk "
+                "detail per RS."
             )
         else:
             usable = usable_slots_for_hospital(all_slots)
