@@ -307,7 +307,32 @@ hilang/tidak terbaca.
     table_df = table_df[display_cols].sort_values(
         by="Opportunity", ascending=False, na_position="last"
     )
-    st.dataframe(table_df, use_container_width=True, height=500, hide_index=True)
+
+    # Kosong (NaN) tampil sebagai "Tidak ada data", bukan "None" bawaan
+    # pandas -- user feedback 2026-08-09: "None" gampang disalahartikan
+    # sebagai angka nol (khususnya di kolom seperti Sessions/wk atau Sat/
+    # weekend gap yang juga punya nilai 0 asli/valid di baris lain).
+    # Dilakukan di dataframe TAMPILAN terpisah (bukan table_df yang
+    # dipakai export CSV) supaya CSV tetap punya sel kosong yang benar
+    # secara semantik untuk diolah lebih lanjut, bukan string tampilan.
+    #
+    # PENTING: seluruh kolom harus jadi string (bukan campuran angka+
+    # string) -- st.dataframe() memakai pyarrow di baliknya, yang gagal
+    # keras (ArrowInvalid, bukan cuma render jelek) kalau satu kolom
+    # berisi float DAN str sekaligus. Makanya nilai yang ADA juga
+    # diformat manual jadi string, bukan dibiarkan sebagai float mentah.
+    _no_data = "Tidak ada data"
+    _decimals_by_col = {
+        "Derm": 0, "Sessions/wk": 0, "Derm hrs/wk": 1,
+        "Gap jam ramai": 4, "Sat/weekend gap": 4, "Opportunity": 4,
+    }
+    display_df = table_df.copy()
+    for col, decimals in _decimals_by_col.items():
+        display_df[col] = display_df[col].apply(
+            lambda v, d=decimals: _no_data if pd.isna(v) else f"{v:.{d}f}"
+        )
+
+    st.dataframe(display_df, use_container_width=True, height=500, hide_index=True)
 
     csv_bytes = table_df.to_csv(index=False).encode("utf-8")
     st.download_button(
@@ -519,16 +544,17 @@ perlu didiskusikan ulang, bukan salah hitung.
                 boundaries=category_boundaries,
             )
 
+            _no_data = "Tidak ada data"
             popup_html = (
                 f"<b>{r['Hospital']}</b><br>"
                 f"Group: {r['Group']}<br>"
                 f"Metrik aktif: {metric_spec.label} = "
-                f"{value if pd.notna(value) else 'unknown'}<br>"
+                f"{value if pd.notna(value) else _no_data}<br>"
                 f"Kategori marker: {category.label}<br>"
-                f"Derm: {r['Derm'] if pd.notna(r['Derm']) else 'unknown'}<br>"
-                f"Derm hrs/wk: {r['Derm hrs/wk'] if pd.notna(r['Derm hrs/wk']) else 'unknown'}<br>"
-                f"Gap jam ramai: {r['Gap jam ramai'] if pd.notna(r['Gap jam ramai']) else 'unknown'}<br>"
-                f"Opportunity: {r['Opportunity'] if pd.notna(r['Opportunity']) else 'insufficient_data'}<br>"
+                f"Derm: {r['Derm'] if pd.notna(r['Derm']) else _no_data}<br>"
+                f"Derm hrs/wk: {r['Derm hrs/wk'] if pd.notna(r['Derm hrs/wk']) else _no_data}<br>"
+                f"Gap jam ramai: {r['Gap jam ramai'] if pd.notna(r['Gap jam ramai']) else _no_data}<br>"
+                f"Opportunity: {r['Opportunity'] if pd.notna(r['Opportunity']) else _no_data}<br>"
                 f"Data quality: {r['Data quality']}"
             )
             folium.CircleMarker(
