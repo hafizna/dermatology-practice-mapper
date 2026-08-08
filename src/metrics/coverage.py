@@ -158,10 +158,25 @@ class SupplyMetrics:
     schedule_completeness: float | None = None
 
 
-def compute_supply_metrics(all_slots_for_hospital: list[ScheduleSlot]) -> SupplyMetrics:
+def compute_supply_metrics(
+    all_slots_for_hospital: list[ScheduleSlot], *, doctor_ids_at_hospital: list[int] | None = None
+) -> SupplyMetrics:
     """Pure computation: given every ScheduleSlot row for one hospital
     (any confidence level — this function does the filtering itself so
     it can also compute schedule_completeness), return SupplyMetrics.
+
+    doctor_ids_at_hospital: the AUTHORITATIVE set of confirmed
+    dermatologist Doctor.id values at this hospital, independent of
+    whether any of them have schedule data at all. Required to get
+    n_dermatologists_unique right for a source like Eka (spec: doctor
+    listing only, NEVER has schedule data by design — see
+    src/scrapers/eka.py) — deriving doctor count purely from usable
+    ScheduleSlot rows would wrongly report 0 dermatologists for a
+    hospital with real, confirmed doctors just because none of them
+    have a parseable schedule. When omitted (e.g. ad-hoc/test calls),
+    falls back to the schedule-derived count, which undercounts for
+    schedule-less sources — production code (build_coverage_matrix)
+    always passes this.
     """
     prime_cfg = get_prime_time_config()
     metrics = SupplyMetrics()
@@ -170,10 +185,14 @@ def compute_supply_metrics(all_slots_for_hospital: list[ScheduleSlot]) -> Supply
     usable = usable_slots_for_hospital(all_slots_for_hospital)
     metrics.schedule_completeness = (len(usable) / total_slot_rows) if total_slot_rows > 0 else None
 
+    if doctor_ids_at_hospital is not None:
+        metrics.n_dermatologists_unique = len(doctor_ids_at_hospital)
+    elif usable:
+        metrics.n_dermatologists_unique = len({s.doctor_id for s in usable})
+
     if not usable:
         return metrics
 
-    metrics.n_dermatologists_unique = len({s.doctor_id for s in usable})
     metrics.n_sessions_week = len(usable)
 
     total_hours = 0.0
@@ -375,7 +394,7 @@ def build_coverage_matrix() -> dict:
                 for row in session.execute(select(Doctor.id).where(Doctor.hospital_id == hospital.id)).all()
             ]
 
-            supply = compute_supply_metrics(slots)
+            supply = compute_supply_metrics(slots, doctor_ids_at_hospital=doctor_ids)
             overlap = compute_overlap_metrics(session, hospital.id, doctor_ids)
             group_has_any = bool(hospital.preferred_rank_group) and hospital.preferred_rank_group in groups_with_doctors
             derm_status = _dermatologist_count_status(hospital, supply.n_dermatologists_unique, group_has_any)

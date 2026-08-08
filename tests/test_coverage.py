@@ -140,6 +140,30 @@ def test_no_slots_returns_zeroed_metrics_not_crash():
     assert m.schedule_completeness is None  # no rows at all, not 0% or 100%
 
 
+def test_doctors_with_zero_schedule_slots_still_counted_when_doctor_ids_given():
+    # Regression guard for a real bug: Eka Hospital (spec: doctor listing
+    # only, NEVER has schedule data by design) was wrongly reported as
+    # n_dermatologists_unique=0 / dermatologist_count_status=CONFIRMED_
+    # ZERO despite having real, confirmed Doctor rows — because the
+    # count was derived purely from usable ScheduleSlot rows, which Eka
+    # never has any of. Passing the authoritative doctor_ids_at_hospital
+    # must fix this even when there are zero (or all-LOW-confidence)
+    # slots.
+    m = compute_supply_metrics([], doctor_ids_at_hospital=[101, 102, 103])
+    assert m.n_dermatologists_unique == 3
+    assert m.n_sessions_week == 0
+    assert m.doctor_hours_week == 0.0
+
+
+def test_doctor_ids_omitted_falls_back_to_schedule_derived_count():
+    # Without doctor_ids_at_hospital (e.g. an ad-hoc/exploratory call),
+    # the old schedule-derived behavior is preserved for backward
+    # compatibility rather than silently reporting 0.
+    slots = [FakeSlot(1, 0, "09:00", "11:00"), FakeSlot(2, 1, "10:00", "12:00")]
+    m = compute_supply_metrics(slots)
+    assert m.n_dermatologists_unique == 2
+
+
 def test_all_low_confidence_gives_zero_completeness_not_none():
     slots = [FakeSlot(1, 0, "17:00", "19:00", ParseConfidence.LOW)]
     m = compute_supply_metrics(slots)
@@ -251,6 +275,30 @@ def test_hospital_with_doctors_gets_has_doctors_status(db_session, monkeypatch):
     metrics = db_session.get(HospitalPracticeMetrics, h.id)
     assert metrics.dermatologist_count_status == DermatologistCountStatus.HAS_DOCTORS
     assert metrics.n_dermatologists_unique == 1
+
+
+def test_doctors_with_no_schedule_data_at_all_are_has_doctors_not_confirmed_zero(db_session, monkeypatch):
+    # Full orchestrator regression test for the Eka Hospital bug (see
+    # test_doctors_with_zero_schedule_slots_still_counted_when_doctor_
+    # ids_given for the unit-level version): a hospital whose doctors
+    # have Doctor rows but ZERO ScheduleSlot rows at all (Eka: doctor
+    # listing only, never has schedule data by design) must still be
+    # HAS_DOCTORS, never CONFIRMED_ZERO.
+    monkeypatch.setattr("src.metrics.coverage.session_scope", lambda: _session_scope_ctx(db_session))
+    h = _make_hospital(db_session, "RS Tanpa Data Jadwal")
+    h.preferred_rank_group = "TestGroup"
+    _make_doctor(db_session, h.id, "budi santoso")
+    _make_doctor(db_session, h.id, "siti aisyah")
+    db_session.flush()
+    # deliberately NO ScheduleSlot rows added
+
+    build_coverage_matrix()
+
+    metrics = db_session.get(HospitalPracticeMetrics, h.id)
+    assert metrics.dermatologist_count_status == DermatologistCountStatus.HAS_DOCTORS
+    assert metrics.n_dermatologists_unique == 2
+    assert metrics.n_sessions_week is None
+    assert metrics.doctor_hours_week is None
 
 
 def test_hospital_in_scraped_group_with_zero_doctors_is_confirmed_zero(db_session, monkeypatch):
