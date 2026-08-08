@@ -1,6 +1,7 @@
 # --- Doctor / patient-adjacent data must never enter the repo (spec §3.8) ---
 data/raw/
 data/processed/
+data/manual_uploads/
 *.sqlite
 *.sqlite3
 *.db

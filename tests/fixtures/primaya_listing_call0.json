@@ -1,0 +1,9 @@
+{
+  "html": "<div class='item asp_r_pagepost asp_r_pagepost_50001'><div class='asp_content'><div class=\"doctor-card\"><div class=\"doctor-card-body\"><div class=\"doctor-card-info\"><h3 class=\"doctor-card-name\"><a href=\"https://primayahospital.com/doctor/dr-anonim-contoh-limabelas-spkk/\">dr. Anonim Contoh Limabelas, Sp.KK</a></h3><div class=\"doctor-card-location\"><i class=\"fa fa-map-marker\"></i>Bekasi</div></div></div></div></div></div><div class='item asp_r_pagepost asp_r_pagepost_50002'><div class='asp_content'><div class=\"doctor-card\"><div class=\"doctor-card-body\"><div class=\"doctor-card-info\"><h3 class=\"doctor-card-name\"><a href=\"https://primayahospital.com/doctor/dr-anonim-contoh-enambelas-spdv/\">dr. Anonim Contoh Enambelas, Sp.DV</a></h3><div class=\"doctor-card-location\"><i class=\"fa fa-map-marker\"></i>Semarang</div></div></div></div></div></div>",
+  "results_count": 2,
+  "full_results_count": 3,
+  "results": [
+    {"id": "50001", "title": "dr. Anonim Contoh Limabelas, Sp.KK"},
+    {"id": "50002", "title": "dr. Anonim Contoh Enambelas, Sp.DV"}
+  ]
+}
