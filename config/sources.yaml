@@ -49,6 +49,20 @@ registry_sources:
     notes: >
       Cari endpoint API/structured terlebih dahulu sebelum HTML parsing
       (spec §3.7). Jangan dijadikan satu-satunya sumber registry.
+  nominatim:
+    tier: tier_2
+    # Fallback geocoder untuk RS yang lolos dari registry Fase 1 tanpa
+    # koordinat (spec §9 Fase 5) -- BUKAN sumber utama, karena OSM
+    # Overpass (Fase 1) sudah memberi koordinat utuh untuk seluruh 554 RS
+    # per 2026-08-08. Endpoint publik resmi osm.org, rate limit wajib
+    # maks 1 request/detik per kebijakan pemakaian Nominatim publik
+    # (lebih ketat dari crawl_policy default 1 req/2 detik).
+    base_url: "https://nominatim.openstreetmap.org/search"
+    notes: >
+      Belum pernah dipanggil (per 2026-08-08) -- seluruh RS di registry
+      sudah punya lat/lon dari Overpass. Kode Fase 5
+      (src/enrich/geocode.py) tetap dibangun untuk menangani kasus RS baru
+      tanpa koordinat di masa depan (mis. entry manual override baru).
 
 # Target group untuk adapter dokter/jadwal (Fase 2-3). URL bersifat
 # reconnaissance per Agustus 2026 (Appendix A) — WAJIB diverifikasi ulang

@@ -68,6 +68,35 @@ def scrape_command(group: str | None, scrape_all: bool) -> None:
     run_scrape(group=group, scrape_all=scrape_all)
 
 
+@cli.command("geocode")
+def geocode_command() -> None:
+    """Fase 5 — Nominatim fallback for any Hospital missing lat/lon, then
+    spatial-integrity audit (bbox check, duplicate-coordinate detection,
+    geocode_confidence re-assessment) + geocode-quality report."""
+    from src.db import session_scope
+    from src.enrich.geocode import (
+        geocode_missing_hospitals,
+        run_spatial_integrity_audit,
+        write_geocode_quality_report,
+    )
+
+    with session_scope() as session:
+        fallback_summary = geocode_missing_hospitals(session)
+        log.info("geocode_fallback_summary", **fallback_summary)
+
+        report = run_spatial_integrity_audit(session)
+
+    report["fallback_summary"] = fallback_summary
+    out_path = write_geocode_quality_report(report)
+
+    print(f"Total hospitals: {report['total_hospitals']}")
+    print(f"Geocode fallback: {fallback_summary['geocoded']} diisi, {fallback_summary['still_missing']} masih kosong.")
+    print(f"Di luar bbox Jabodetabek: {len(report['out_of_bbox'])}")
+    print(f"Grup koordinat identik (perlu review): {len(report['exact_duplicate_coordinate_groups'])}")
+    print(f"Distribusi geocode_confidence: {report['confidence_counts']}")
+    print(f"Laporan lengkap: {out_path}")
+
+
 @cli.command("compute-core")
 @click.option(
     "--universe",
