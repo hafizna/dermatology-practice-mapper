@@ -108,12 +108,23 @@ doctor_schedule_sources:
     tier: tier_1
     display_name: "Hermina"
     base_urls:
-      - "https://www.herminahospitals.com"
+      - "https://api.herminahospitals.com"
     requires_js: null
     access_status: "accessible"
     notes: >
       Dicek 2026-08-08: homepage redirect 308 -> /id, final 200 dengan UA
-      jujur. Struktur data dokter/jadwal belum direconnaissance detail.
+      jujur. RIWAYAT PENTING: recon pertama pakai halaman
+      /id/doctors/specialist/{slug} (data RSC-embedded) hanya menemukan 12
+      dokter kulit se-Indonesia -- pengguna dengan tepat menandai ini
+      tidak masuk akal (cabang Jakarta seperti Ciledug/Ciputat/Serpong
+      sama sekali tidak muncul). Pengguna menemukan endpoint yang benar:
+      GET api.herminahospitals.com/api/v1/public/doctors?page={n}
+      &per_page=20&lang=id&speciality_id=kulit-dan-kelamin-dermatologi-
+      dan-venereologi -- terkonfirmasi count=146 nasional, 8 halaman,
+      SEMUA cabang yang sebelumnya hilang muncul kembali. Adapter
+      (src/scrapers/hermina.py) sudah diperbaiki memakai endpoint ini dan
+      terdaftar di registry. Situs memang lambat merespons (butuh wait
+      panjang saat recon Playwright) -- bukan bug scraper.
   primaya:
     tier: tier_1
     display_name: "Primaya"

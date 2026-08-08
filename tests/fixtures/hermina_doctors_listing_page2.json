@@ -1,0 +1,29 @@
+{
+  "success": true,
+  "code": 200,
+  "status": "OK",
+  "message": "OK",
+  "data": [
+    {
+      "id": "9003",
+      "type": "doctors",
+      "attributes": {
+        "id": 9003,
+        "full_name": "dr. Anonim Contoh Sebelas, Sp.KK",
+        "about": "-",
+        "slug": "dr-anonim-contoh-sebelas-spkk",
+        "practic_locations": ["Hermina Ciledug"],
+        "speciality": "Kulit dan Kelamin (Dermatologi dan Venereologi)",
+        "available_for_appointment": true
+      }
+    }
+  ],
+  "pagination": {
+    "count": 3,
+    "page": 2,
+    "limit": 2,
+    "last": 2,
+    "prev": 1,
+    "next": null
+  }
+}

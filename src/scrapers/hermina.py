@@ -1,34 +1,37 @@
 """Hermina Hospitals adapter — Fase 3.
 
-Reconnaissance (2026-08-08, via Playwright network capture + RSC payload
-inspection per spec §3.7):
+Reconnaissance (2026-08-08, via Playwright network capture per spec §3.7 —
+site confirmed slow, needed a generous wait before XHR calls appeared):
 
-- Doctor listing page (server-rendered, Next.js App Router):
-    GET https://herminahospitals.com/id/doctors/specialist/kulit-dan-kelamin-dermatologi-dan-venereologi
-  No separate client-side API call for this listing (0 xhr/fetch requests
-  observed) — the doctor array ships embedded in a React Server Components
-  streaming payload inside `<script>self.__next_f.push(...)</script>` tags.
-  Extracted via src/scrapers/_rsc_extract.py (find the `doctors` array),
-  not CSS-selector scraping. Confirmed 2026-08-08: 12 dermatologists
-  found, no pagination UI/parameter detected — if this count looks wrong
-  for a hospital group Hermina's size, re-verify rather than trust it
-  blindly (Appendix A caveat).
-- api.herminahospitals.com/api/v1/public/doctors (generic listing
-  endpoint) does NOT actually filter by any `speciality`/`specialty`/
-  `speciality_slug` query parameter tried — it silently ignores the filter
-  and returns doctors of ALL specialities. Do not use this endpoint for
-  discovery; the RSC-embedded listing above is correctly pre-filtered.
-- Per-doctor schedule (recurring weekly pattern, day_integer 0=? — see
-  note below — NOT concrete dates like Mitra Keluarga):
+- CORRECT doctor listing endpoint (found by the user after the
+  RSC-embedded `/id/doctors/specialist/{slug}` page turned out to return
+  an incomplete/truncated result — see history below):
+    GET https://api.herminahospitals.com/api/v1/public/doctors
+        ?page={n}&per_page=20&lang=id
+        &speciality_id=kulit-dan-kelamin-dermatologi-dan-venereologi
+  Unlike the generic `/doctors` endpoint tried earlier (which silently
+  ignored every filter parameter attempted), `speciality_id` on THIS path
+  does filter correctly. Confirmed 2026-08-08: count=146 dermatologists
+  nationwide, 8 pages at per_page=20 (`pagination.last`).
+- Per-doctor schedule (unchanged from earlier recon): recurring weekly
+  pattern via
     GET https://api.herminahospitals.com/api/v1/public/doctors/{slug}/schedules
         ?schedule_type=executive&type=table&lang=id
   Response: {"data": {"<hospital name>": {"<clinic name>": [{"day":
   "monday", "day_integer": 1, "from_time": "10:00", "to_time": "12:00",
-  ...}]}}}. day_integer appears to be 1=Monday..6=Saturday based on the
-  "monday"->1 mapping observed; Sunday (0 or 7?) was not observed in the
-  sample and should not be assumed — Fase 4 parsing should derive
-  day_of_week from the `day` string (spec's canonical 0=Senin mapping),
-  not blindly trust day_integer.
+  ...}]}}}. Fase 4 parsing should derive day_of_week from the `day`
+  string, not assume day_integer's numbering without checking Sunday.
+
+History (why this replaced an earlier, wrong approach): the first recon
+pass used `/id/doctors/specialist/kulit-dan-kelamin-dermatologi-dan-
+venereologi` (a page whose doctor list is embedded in a Next.js RSC
+streaming payload, extracted via src/scrapers/_rsc_extract.py). That page
+returned only 12 doctors with no pagination signal, which the user
+correctly flagged as implausible for a group Hermina's size — known
+branches (Ciledug, Ciputat, Serpong) were entirely absent. Root cause was
+never fully confirmed, but the paginated API above is unambiguously more
+complete (146 vs 12) and is now the source of truth. _rsc_extract.py is
+kept for potential reuse elsewhere but no longer used by this adapter.
 
 Re-verify this structure before relying on it long-term (Appendix A
 caveat — site behavior can change without notice).
@@ -37,19 +40,20 @@ caveat — site behavior can change without notice).
 from __future__ import annotations
 
 from src.logging_setup import get_logger
-from src.scrapers._rsc_extract import extract_rsc_json_blocks, find_array_under_key_in_blocks
 from src.scrapers.base import BaseScraper, HospitalRef, RawDoctorRecord
 
 log = get_logger(__name__)
 
-SITE_BASE = "https://herminahospitals.com"
 API_BASE = "https://api.herminahospitals.com"
-DERMATOLOGY_LISTING_PATH = "/id/doctors/specialist/kulit-dan-kelamin-dermatologi-dan-venereologi"
+SITE_BASE = "https://herminahospitals.com"
+DERMATOLOGY_SPECIALITY_ID = "kulit-dan-kelamin-dermatologi-dan-venereologi"
+LISTING_PER_PAGE = 20
 
 # Jabodetabek branch name fragments, matched against `practic_locations`
-# entries (e.g. "Hermina Depok", "Hermina Daan Mogot"). Hermina branch
-# names are city/area-explicit, but some area names are ambiguous with
-# other regions (documented below) so this list is deliberately specific.
+# entries (e.g. "Hermina Depok", "Hermina Daan Mogot", "RS Hermina
+# Galaxy"). Hermina branch names are city/area-explicit, but some area
+# names are ambiguous with other regions (documented below) so this list
+# is deliberately specific.
 _JABODETABEK_BRANCH_HINTS = [
     "tangerang",
     "daan mogot",  # Jakarta Barat
@@ -63,8 +67,10 @@ _JABODETABEK_BRANCH_HINTS = [
     "podomoro",  # Jakarta
     "galaxy",  # Bekasi
     "ciputat",  # Tangerang Selatan
+    "ciledug",  # Tangerang
     "cikarang",
     "bintaro",  # Tangerang Selatan
+    "serpong",  # Tangerang Selatan
 ]
 
 # Branches seen during recon that must NOT match Jabodetabek hints (kept
@@ -78,6 +84,7 @@ _KNOWN_NON_JABODETABEK_BRANCHES = [
     "medan",
     "makassar",
     "tasikmalaya",
+    "purwokerto",
 ]
 
 
@@ -89,13 +96,13 @@ def _is_jabodetabek_branch(branch_name: str) -> bool:
 class HerminaScraper(BaseScraper):
     group_name = "hermina"
     base_urls = [SITE_BASE, API_BASE]
-    requires_js = False  # listing is server-rendered HTML (no JS needed at runtime); schedule is plain JSON API
+    requires_js = False  # both listing and schedule are plain JSON APIs; JS only needed during recon to discover them
 
     def discover_hospitals(self) -> list[HospitalRef]:
         raise NotImplementedError(
             "Hermina discover_hospitals() tidak berdiri sendiri — gunakan "
             "fetch_all_dermatology_doctors(), yang menemukan hospital DAN dokter "
-            "sekaligus dari satu halaman listing spesialisasi."
+            "sekaligus dari listing API yang sudah ter-filter speciality_id."
         )
 
     def fetch_doctors(self, hospital: HospitalRef) -> list[RawDoctorRecord]:
@@ -105,19 +112,38 @@ class HerminaScraper(BaseScraper):
         )
 
     def _fetch_dermatology_listing(self) -> list[dict]:
-        html = self._get_html(
-            f"{SITE_BASE}{DERMATOLOGY_LISTING_PATH}",
-            hospital_slug="_group",
-            cache_key="dermatology_listing",
-        )
-        blocks = extract_rsc_json_blocks(html)
-        doctors = find_array_under_key_in_blocks(blocks, "doctors")
-        if doctors is None:
-            raise RuntimeError(
-                "Hermina: tidak menemukan array 'doctors' di RSC payload halaman listing "
-                "dermatologi — struktur situs kemungkinan berubah. Lihat PROJECT_SPEC.md §14."
+        all_entries: list[dict] = []
+        page = 1
+        while True:
+            payload = self._get_json(
+                f"{API_BASE}/api/v1/public/doctors",
+                hospital_slug="_group",
+                cache_key=f"doctors_page_{page}",
+                params={
+                    "page": page,
+                    "per_page": LISTING_PER_PAGE,
+                    "lang": "id",
+                    "speciality_id": DERMATOLOGY_SPECIALITY_ID,
+                },
             )
-        return doctors
+            entries = payload.get("data", [])
+            all_entries.extend(entries)
+
+            pagination = payload.get("pagination", {})
+            last_page = pagination.get("last", 1)
+            total_count = pagination.get("count")
+            log.info(
+                "hermina_page_fetched",
+                page=page,
+                last_page=last_page,
+                total_count=total_count,
+                n_entries=len(entries),
+            )
+            if page >= last_page or not entries:
+                break
+            page += 1
+
+        return all_entries
 
     def fetch_doctor_schedule(self, doctor_slug: str) -> dict:
         """Fetch the per-doctor schedule payload (recurring weekly pattern,
@@ -131,9 +157,9 @@ class HerminaScraper(BaseScraper):
         )
 
     def fetch_all_dermatology_doctors(self, *, jabodetabek_only: bool = True) -> list[RawDoctorRecord]:
-        """Single entrypoint: list all dermatologists (RSC-embedded, one
-        HTML fetch covers all — no pagination observed during recon), then
-        fetch each one's recurring weekly schedule.
+        """Single entrypoint: list all dermatologists via the paginated
+        speciality_id-filtered API (confirmed 146 nationwide / 8 pages as
+        of recon), then fetch each Jabodetabek-matching doctor's schedule.
         """
         doctors = self._fetch_dermatology_listing()
         log.info("hermina_dermatology_doctors_found_network_wide", count=len(doctors))

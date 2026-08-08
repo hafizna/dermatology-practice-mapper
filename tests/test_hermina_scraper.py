@@ -1,6 +1,7 @@
 """Fase 3: Hermina adapter tests — offline, fixture-based, no network calls
-(spec §14). Exercises RSC extraction (src/scrapers/_rsc_extract.py) and
-Jabodetabek branch filtering against fixture data.
+(spec §14). Uses the paginated `/api/v1/public/doctors?speciality_id=...`
+API (the corrected source of truth after the first RSC-embedded listing
+page was found to return an implausibly incomplete result set).
 """
 
 from __future__ import annotations
@@ -18,32 +19,33 @@ FIXTURES = Path(__file__).parent / "fixtures"
 @pytest.fixture()
 def scraper(monkeypatch) -> HerminaScraper:
     s = HerminaScraper(use_cache=False)
-    listing_html = (FIXTURES / "hermina_dermatology_listing.html").read_text(encoding="utf-8")
+    page1 = json.loads((FIXTURES / "hermina_doctors_listing_page1.json").read_text(encoding="utf-8"))
+    page2 = json.loads((FIXTURES / "hermina_doctors_listing_page2.json").read_text(encoding="utf-8"))
     schedule = json.loads((FIXTURES / "hermina_doctor_schedule.json").read_text(encoding="utf-8"))
 
-    def fake_get_html(self, url, *, hospital_slug, cache_key, params=None):
-        assert "doctors/specialist" in url
-        return listing_html
-
     def fake_get_json(self, url, *, hospital_slug, cache_key, params=None):
-        assert "schedules" in url
-        return schedule
+        if "doctors/" in url and "schedules" in url:
+            return schedule
+        if url.endswith("/api/v1/public/doctors"):
+            page = params.get("page", 1) if params else 1
+            return page1 if page == 1 else page2
+        raise AssertionError(f"unexpected URL in test: {url} params={params}")
 
-    monkeypatch.setattr(HerminaScraper, "_get_html", fake_get_html)
     monkeypatch.setattr(HerminaScraper, "_get_json", fake_get_json)
     return s
 
 
-def test_fetch_all_unfiltered_returns_all_three(scraper: HerminaScraper):
+def test_pagination_walks_all_pages(scraper: HerminaScraper):
     records = scraper.fetch_all_dermatology_doctors(jabodetabek_only=False)
+    # page1 has 2 entries, page2 has 1 entry -> 3 total across both pages.
     assert len(records) == 3
 
 
-def test_jabodetabek_filter_keeps_depok_jatinegara_and_bekasi(scraper: HerminaScraper):
+def test_jabodetabek_filter_keeps_depok_jatinegara_and_ciledug(scraper: HerminaScraper):
     records = scraper.fetch_all_dermatology_doctors(jabodetabek_only=True)
     names = {r.raw_name for r in records}
     assert "dr. Anonim Contoh Sembilan, Sp.DVE" in names  # Depok + Jatinegara
-    assert "dr. Anonim Contoh Sebelas, Sp.KK" in names  # Bekasi
+    assert "dr. Anonim Contoh Sebelas, Sp.KK" in names  # Ciledug (page 2!)
 
 
 def test_jabodetabek_filter_excludes_arcamanik(scraper: HerminaScraper):
@@ -68,6 +70,8 @@ def test_source_url_uses_doctor_slug(scraper: HerminaScraper):
 
 def test_is_jabodetabek_branch_matching():
     assert _is_jabodetabek_branch("Hermina Depok") is True
-    assert _is_jabodetabek_branch("Hermina Bekasi") is True
+    assert _is_jabodetabek_branch("Hermina Ciledug") is True
+    assert _is_jabodetabek_branch("Hermina Serpong") is True
+    assert _is_jabodetabek_branch("RS Hermina Galaxy") is True
     assert _is_jabodetabek_branch("Hermina Arcamanik") is False
     assert _is_jabodetabek_branch("Hermina Pekalongan") is False

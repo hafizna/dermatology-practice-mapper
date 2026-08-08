@@ -1,0 +1,42 @@
+{
+  "success": true,
+  "code": 200,
+  "status": "OK",
+  "message": "OK",
+  "data": [
+    {
+      "id": "9001",
+      "type": "doctors",
+      "attributes": {
+        "id": 9001,
+        "full_name": "dr. Anonim Contoh Sembilan, Sp.DVE",
+        "about": "-",
+        "slug": "dr-anonim-contoh-sembilan-spdve",
+        "practic_locations": ["Hermina Depok", "Hermina Jatinegara"],
+        "speciality": "Kulit dan Kelamin (Dermatologi dan Venereologi)",
+        "available_for_appointment": true
+      }
+    },
+    {
+      "id": "9002",
+      "type": "doctors",
+      "attributes": {
+        "id": 9002,
+        "full_name": "dr. Anonim Contoh Sepuluh, SpKK",
+        "about": "-",
+        "slug": "dr-anonim-contoh-sepuluh-spkk",
+        "practic_locations": ["Hermina Arcamanik"],
+        "speciality": "Kulit dan Kelamin (Dermatologi dan Venereologi)",
+        "available_for_appointment": true
+      }
+    }
+  ],
+  "pagination": {
+    "count": 3,
+    "page": 1,
+    "limit": 2,
+    "last": 2,
+    "prev": null,
+    "next": 2
+  }
+}
