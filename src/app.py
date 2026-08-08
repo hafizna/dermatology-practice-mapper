@@ -25,6 +25,7 @@ from sqlalchemy.orm import Session
 from streamlit_folium import st_folium
 
 from src.db import get_engine
+from src.deploy_data import ensure_database_present
 from src.map_categories import (
     MAP_METRICS,
     calculate_category_boundaries,
@@ -168,6 +169,20 @@ st.caption(
     "tidak memasukkan populasi/affluence/office density (lihat PROJECT_SPEC.md §10)."
 )
 
+if not ensure_database_present():
+    # Only genuinely blocking on a fresh host with the database missing
+    # AND no GITHUB_REPO/GITHUB_TOKEN secrets configured — a normal local
+    # run (database already on disk from the CLI pipeline) never reaches
+    # this branch, since ensure_database_present() is a no-op when the
+    # file already exists. See src/deploy_data.py docstring.
+    st.error(
+        "Database tidak ditemukan dan tidak berhasil diunduh dari GitHub Release. "
+        "Kalau ini jalan lokal: jalankan `python -m src.cli init-db` lalu "
+        "`python -m src.cli fetch-registry`. Kalau ini deploy Streamlit Cloud: "
+        "cek secrets GITHUB_REPO/GITHUB_TOKEN sudah diisi (lihat DEPLOY.md)."
+    )
+    st.stop()
+
 try:
     _probe_engine = _get_engine()
     with Session(_probe_engine) as _s:
@@ -247,6 +262,23 @@ with tab_ranking:
         "RS dengan Data status 'unknown'/'partial' tidak memiliki skor yang bisa "
         "diandalkan (lihat kolom Data quality dan tab Data Quality)."
     )
+    with st.expander("ℹ️ Kenapa ada RS dengan data lengkap tapi Opportunity kosong?"):
+        st.markdown(
+            """
+Kolom **Derm**, **Sessions/wk**, **Derm hrs/wk**, dan **Gap jam ramai** dihitung
+dari jadwal yang BERHASIL dibaca dengan yakin (confidence tinggi/medium) — jadi
+tetap terisi angka meskipun sebagian jadwal RS itu tidak jelas/ambigu dan tidak
+ikut dihitung.
+
+Tapi Opportunity baru dihitung kalau minimal **70% dari seluruh baris jadwal RS
+itu** berhasil dibaca dengan yakin. Kalau di bawah itu, angka yang sudah dihitung
+(Derm, Sessions/wk, dst) dianggap TIDAK cukup mewakili keseluruhan jadwal RS,
+jadi Opportunity sengaja dikosongkan — bukan dianggap 0, tapi "belum bisa
+disimpulkan" (lihat kolom **Kenapa Opportunity kosong?** untuk alasan per RS).
+Ini supaya rankingnya tidak salah menyimpulkan dari data yang sebagian besar
+hilang/tidak terbaca.
+            """
+        )
 
     display_cols = [
         "Hospital",
@@ -258,8 +290,21 @@ with tab_ranking:
         "Sat/weekend gap",
         "Opportunity",
         "Data quality",
+        "Kenapa Opportunity kosong?",
     ]
-    table_df = filtered[display_cols].sort_values(
+    table_df = filtered.copy()
+    # Kolom "Kenapa Opportunity kosong?" hanya terisi untuk baris yang
+    # memang tidak dapat skor (score_status != ok) — user feedback
+    # 2026-08-09: kolom lain (Derm, Sessions/wk, dst) tetap terisi angka
+    # untuk RS ini (dihitung dari jadwal yang BERHASIL di-parse), tapi
+    # itu dianggap tidak cukup mewakili keseluruhan jadwal RS untuk
+    # dijadikan skor -- tanpa penjelasan eksplisit ini terlihat seperti
+    # bug ("datanya nyaris lengkap, kok Opportunity-nya kosong?").
+    table_df["Kenapa Opportunity kosong?"] = table_df.apply(
+        lambda r: r["score_status_reason"] if r["score_status"] != "ok" else "",
+        axis=1,
+    )
+    table_df = table_df[display_cols].sort_values(
         by="Opportunity", ascending=False, na_position="last"
     )
     st.dataframe(table_df, use_container_width=True, height=500, hide_index=True)
