@@ -5,7 +5,12 @@ from __future__ import annotations
 
 import datetime as dt
 
-from src.registry.merge import _dedup_osm_records, _infer_ownership, _match_preferred_group
+from src.registry.merge import (
+    _dedup_osm_records,
+    _infer_ownership,
+    _load_preferred_group_overrides,
+    _match_preferred_group,
+)
 from src.registry.osm import OsmHospitalRecord
 
 
@@ -95,3 +100,19 @@ def test_match_preferred_group_case_insensitive_substring():
     assert _match_preferred_group("RS Eka Hospital BSD", groups) == "Eka Hospital"
     assert _match_preferred_group("SILOAM HOSPITALS LIPPO VILLAGE", groups) == "Siloam"
     assert _match_preferred_group("RSUD Tarakan", groups) is None
+
+
+def test_load_preferred_group_overrides_reads_real_csv():
+    # Regression guard for the Fase 4.5 pipeline investigation: some OSM
+    # entries were left preferred_rank_group=None even though a human
+    # can confirm which brand they belong to by location —
+    # config/manual_overrides.csv is the sanctioned Tier-3 correction
+    # mechanism (spec) for exactly this. Note: "RS GRHA KEDOYA" was
+    # investigated too (plausibly EMC's Kedoya branch by coordinate) but
+    # the user explicitly declined that override, so it deliberately
+    # stays untagged/its own entry — not every plausible match gets
+    # auto-applied.
+    overrides = _load_preferred_group_overrides()
+    assert overrides.get("pondok indah") == "RS Pondok Indah"
+    assert overrides.get("puri indah pondok indah") == "RS Pondok Indah"
+    assert "grha kedoya" not in overrides

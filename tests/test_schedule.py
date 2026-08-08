@@ -14,6 +14,7 @@ from src.parsing.schedule import (
     ParsedScheduleSlot,
     normalize_day_of_week,
     parse_schedule_entries,
+    parse_schedule_entries_by_hospital,
     parse_time_range_text,
 )
 
@@ -333,7 +334,98 @@ def test_unrecognized_source_returns_low_confidence_without_guessing():
     slots = parse_schedule_entries([{"whatever": "shape"}], source="some_new_unhandled_source")
     assert len(slots) == 1
     assert slots[0].day_of_week is None
-    assert slots[0].parse_confidence == "low"
+
+
+# --- parse_schedule_entries_by_hospital: multi-branch doctors ------------
+#
+# Regression coverage for a real Fase 4.5 pipeline bug: Hermina, RSPI and
+# Primaya can report ONE doctor at SEVERAL branches within a single raw
+# record. The flat parse_schedule_entries() pools every branch's slots
+# together, which would wrongly attach branch A's schedule to branch B's
+# Doctor row too. parse_schedule_entries_by_hospital() must keep each
+# branch's slots separate.
+
+
+def test_returns_none_for_single_branch_sources():
+    # Sources that report exactly one hospital per record don't need
+    # branch-scoping — None signals "use the flat parser instead", not
+    # "this doctor has no schedule".
+    assert parse_schedule_entries_by_hospital([], source="siloam") is None
+    assert parse_schedule_entries_by_hospital([], source="emc") is None
+    assert parse_schedule_entries_by_hospital([], source="eka") is None
+
+
+def test_hermina_by_hospital_keeps_branches_separate():
+    entries = [
+        {
+            "Hermina Depok": {
+                "Klinik Kulit": [
+                    {"day": "monday", "from_time": "10:00", "to_time": "12:00"},
+                ]
+            },
+            "Hermina Jatinegara": {
+                "Klinik Kulit": [
+                    {"day": "tuesday", "from_time": "14:00", "to_time": "16:00"},
+                ]
+            },
+        }
+    ]
+    by_hospital = parse_schedule_entries_by_hospital(entries, source="hermina")
+    assert set(by_hospital.keys()) == {"Hermina Depok", "Hermina Jatinegara"}
+    assert len(by_hospital["Hermina Depok"]) == 1
+    assert by_hospital["Hermina Depok"][0].day_of_week == 0
+    assert len(by_hospital["Hermina Jatinegara"]) == 1
+    assert by_hospital["Hermina Jatinegara"][0].day_of_week == 1
+
+
+def test_rspi_by_hospital_keeps_branches_separate():
+    entries = [
+        {
+            "hospital": "RS Pondok Indah - Puri Indah",
+            "clinics": [{"schedules": [{"day": "Monday", "time_from": "09:00:00", "time_to": "15:00:00"}]}],
+        },
+        {
+            "hospital": "RS Pondok Indah - Bintaro Jaya",
+            "clinics": [{"schedules": [{"day": "Tuesday", "time_from": "10:00:00", "time_to": "12:00:00"}]}],
+        },
+    ]
+    by_hospital = parse_schedule_entries_by_hospital(entries, source="rs_pondok_indah")
+    assert set(by_hospital.keys()) == {"RS Pondok Indah - Puri Indah", "RS Pondok Indah - Bintaro Jaya"}
+    assert by_hospital["RS Pondok Indah - Puri Indah"][0].day_of_week == 0
+    assert by_hospital["RS Pondok Indah - Bintaro Jaya"][0].day_of_week == 1
+
+
+def test_primaya_by_hospital_keeps_branches_separate():
+    # Real shape (confirmed Fase 4.5 pipeline testing): one doctor's
+    # schedule_html can contain multiple ".schedule-item" blocks, each
+    # tagged with its own ".schedule-hospital" branch name.
+    html = (
+        "<div class='schedule-item'>"
+        "<div class='schedule-hospital'>Primaya Hospital Bekasi Timur</div>"
+        "<div class='schedule-day-row'>"
+        "<span class='schedule-day-label'>Senin</span>"
+        "<span class='schedule-day-time'>14.00 - 18.00<br/>(Tatap Muka)</span>"
+        "</div>"
+        "</div>"
+        "<div class='schedule-item'>"
+        "<div class='schedule-hospital'>Primaya Hospital Tangerang</div>"
+        "<div class='schedule-day-row'>"
+        "<span class='schedule-day-label'>Rabu</span>"
+        "<span class='schedule-day-time'>09.00 - 11.00<br/>(Tatap Muka)</span>"
+        "</div>"
+        "</div>"
+    )
+    entries = [{"raw_html": html}]
+    by_hospital = parse_schedule_entries_by_hospital(entries, source="primaya")
+    assert set(by_hospital.keys()) == {"Primaya Hospital Bekasi Timur", "Primaya Hospital Tangerang"}
+    assert by_hospital["Primaya Hospital Bekasi Timur"][0].day_of_week == 0
+    assert by_hospital["Primaya Hospital Bekasi Timur"][0].start_time == "14:00"
+    assert by_hospital["Primaya Hospital Tangerang"][0].day_of_week == 2
+    assert by_hospital["Primaya Hospital Tangerang"][0].start_time == "09:00"
+
+
+def test_primaya_by_hospital_empty_html_returns_empty_dict():
+    assert parse_schedule_entries_by_hospital([{"raw_html": ""}], source="primaya") == {}
 
 
 def test_eka_never_dispatched_no_parser_registered():

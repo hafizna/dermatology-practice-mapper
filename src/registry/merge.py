@@ -182,6 +182,30 @@ def _match_preferred_group(name: str, preferred_groups: list[str]) -> str | None
     return None
 
 
+def _load_preferred_group_overrides() -> dict[str, str]:
+    """Manual overrides for preferred_rank_group, keyed by
+    normalize_hospital_name(hospital name). Fase 4.5 pipeline testing
+    surfaced real cases where a hospital's OSM `name` tag doesn't contain
+    its brand's substring at all (e.g. "RS GRHA KEDOYA" is EMC's Kedoya
+    branch, but has no "emc" substring for _match_preferred_group to
+    find) — the substring heuristic above cannot and should not try to
+    guess these; config/manual_overrides.csv (spec's Tier-3 manual
+    override mechanism) is the sanctioned place to record a human-
+    confirmed correction instead.
+
+    Only entity_type="hospital", field="preferred_rank_group" rows are
+    used here; other override rows (if any get added later) are ignored
+    by this loader, not an error.
+    """
+    from src.scrapers.manual import load_manual_overrides
+
+    overrides = {}
+    for o in load_manual_overrides():
+        if o.entity_type == "hospital" and o.field == "preferred_rank_group":
+            overrides[o.entity_key] = o.override_value
+    return overrides
+
+
 def run_registry_pipeline(source: str = "all") -> None:
     init_db()
     prefs = get_hospital_preferences()
@@ -198,6 +222,7 @@ def run_registry_pipeline(source: str = "all") -> None:
         return
 
     deduped, unresolved = _dedup_osm_records(osm_records)
+    group_overrides = _load_preferred_group_overrides()
 
     n_with_coords = 0
     n_preferred = 0
@@ -216,6 +241,10 @@ def run_registry_pipeline(source: str = "all") -> None:
             name_normalized = normalize_hospital_name(rec.name or "")
             ownership = _infer_ownership(rec.tags)
             preferred_group = _match_preferred_group(rec.name or "", prefs.preferred_groups)
+            if name_normalized in group_overrides:
+                # Tier-3 manual override wins over the substring heuristic
+                # — see _load_preferred_group_overrides() docstring.
+                preferred_group = group_overrides[name_normalized]
             addr = rec.address_raw
 
             address_parts = [p for p in [addr.get("full")] if p]

@@ -1,0 +1,436 @@
+"""Scraper -> parsing -> persistence pipeline — bridges Fase 2/3 (raw
+scraping) and Fase 4 (parsing) into the `doctors`/`schedule_slots` tables,
+so Fase 5 (geocoding) and Fase 6 (coverage metrics) have something to
+read.
+
+This is not an explicitly numbered phase in PROJECT_SPEC.md, but is
+required by the product architecture in spec §4 ("Registry -> Doctor &
+Schedule Collection -> Parsing/Normalization/Dedup -> Core Practice
+Opportunity") — parsed doctor/schedule data has to land somewhere before
+metrics can be computed on it.
+
+Key design decisions:
+- Matching a scraper's hospital name (e.g. "Siloam Hospitals ASRI") to
+  the Fase 1 registry's Hospital row (e.g. "RS SILOAM ASRI", sourced from
+  OSM tags with much less consistent formatting) needs its own fuzzy
+  matching pass — a DIFFERENT matching problem than Fase 1's
+  within-source OSM dedup (we're matching ACROSS sources here), so it
+  gets its own function (match_hospital_by_name) even though both build
+  on the same normalize_hospital_name() building block.
+- Each adapter's RawDoctorRecord.raw_payload has an adapter-specific
+  shape (documented per-adapter in src/scrapers/*.py) — there is no
+  single generic way to pull "the hospital name" out of it. Rather than
+  one function that tries to guess the shape, each source gets its own
+  small extractor in _HOSPITAL_NAME_EXTRACTORS, mirroring the
+  per-source dispatch pattern already used in src/parsing/schedule.py's
+  _SOURCE_PARSERS.
+
+Known registry gaps (investigated 2026-08-08, run via
+scripts/run_pipeline_all.py against all 10 adapters): a number of
+scraper-reported branch names have NO plausible match in the Fase 1
+OSM-derived registry at all — these are genuine gaps, not matching bugs,
+confirmed by searching the registry for every plausible substring
+(city/area name, brand fragment) and finding nothing at that location.
+Left as documented hospital_unmatched counts rather than guessed:
+MRCCC Siloam Hospitals Semanggi, Siloam Hospitals Agora Cempaka Putih,
+Siloam Hospitals Bogor, Siloam Specialist Center Senayan, Siloam Heart
+Hospital, Hermina Ciledug, Mitra Keluarga Grand Wisata, RS EMC Grha
+Kedoya (a real hospital IS present in the registry as "RS GRHA KEDOYA"
+untagged with any preferred_rank_group — a coordinate-based match
+strongly suggests it's the same institution, but the user explicitly
+declined tagging it as EMC on 2026-08-08, so it deliberately stays
+untagged), Brawijaya Hospital - Antasari/Depok/Tangerang, Bethsaida
+Gading Serpong, RSIA Eka Hospital PIK/Pluit, EKA Hospital Bekasi/Depok/
+MT Haryono/Permata Hijau, and 2 of Mayapada's 3 unmatched branches
+(Jakarta Selatan/Jakarta Timur — the registry does have a 3rd bare-named
+"Mayapada Hospital" entry near Kuningan/South Jakarta that's PLAUSIBLY
+one of these, but wasn't given an override: no address confirms it, and
+it's ambiguous between two scraper-reported branch names). Mayapada
+Hospital Tangerang WAS confirmed by address match but was not overridden
+either, because the registry has two identical bare "Mayapada Hospital"
+name rows with no way to key an override by name alone without an
+unstable database ID — see git history for the ID-sentinel approach that
+was tried and deliberately backed out for that reason.
+"""
+
+from __future__ import annotations
+
+import datetime as dt
+
+from rapidfuzz import fuzz
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from src.logging_setup import get_logger
+from src.models import ConfidenceLevel, Doctor, Hospital, ParseConfidence, ScheduleSlot, SourceTier
+from src.parsing.credentials import is_dermatologist_credential
+from src.parsing.hospital_names import normalize_hospital_name
+from src.parsing.names import normalize_person_key
+from src.parsing.schedule import parse_schedule_entries, parse_schedule_entries_by_hospital
+from src.scrapers.base import RawDoctorRecord
+
+log = get_logger(__name__)
+
+HOSPITAL_MATCH_THRESHOLD = 80.0
+
+_CONFIDENCE_MAP = {
+    "high": ParseConfidence.HIGH,
+    "medium": ParseConfidence.MEDIUM,
+    "low": ParseConfidence.LOW,
+}
+
+
+# --- per-source hospital-name extraction ---------------------------------
+#
+# Each function pulls the raw hospital name string(s) a doctor practices
+# at out of that adapter's raw_payload shape. Some sources report exactly
+# one hospital per record (most adapters); a few report several (a
+# doctor practicing at multiple branches of the same group) — those
+# return a list so the caller can create one Doctor+ScheduleSlot set per
+# branch.
+
+
+def _hospital_names_siloam(record: RawDoctorRecord) -> list[str]:
+    availability = record.raw_payload.get("availability", [])
+    return [a.get("hospital_name", "") for a in availability if a.get("hospital_name")]
+
+
+def _hospital_names_mitra_keluarga(record: RawDoctorRecord) -> list[str]:
+    clinic = record.raw_payload.get("clinic") or {}
+    name = clinic.get("name", "")
+    return [name] if name else []
+
+
+def _hospital_names_hermina(record: RawDoctorRecord) -> list[str]:
+    schedule = record.raw_payload.get("schedule", {})
+    return [name for name in schedule.keys() if name]
+
+
+def _hospital_names_emc(record: RawDoctorRecord) -> list[str]:
+    branch = record.raw_payload.get("card", {}).get("branch", "")
+    return [branch] if branch else []
+
+
+def _hospital_names_mayapada(record: RawDoctorRecord) -> list[str]:
+    card = record.raw_payload.get("card", {})
+    hospital = card.get("hospital", "")
+    return [hospital] if hospital else []
+
+
+def _hospital_names_bethsaida(record: RawDoctorRecord) -> list[str]:
+    card = record.raw_payload.get("card", {})
+    branch = card.get("branch", "")
+    return [branch] if branch else []
+
+
+def _hospital_names_rs_pondok_indah(record: RawDoctorRecord) -> list[str]:
+    doc = record.raw_payload.get("doctor", {})
+    names = []
+    for sched in doc.get("doctor_schedule", []):
+        h = sched.get("hospital", "")
+        if h:
+            names.append(h)
+    return names
+
+
+def _hospital_names_brawijaya(record: RawDoctorRecord) -> list[str]:
+    name = record.raw_payload.get("branch_name", "")
+    return [name] if name else []
+
+
+def _hospital_names_primaya(record: RawDoctorRecord) -> list[str]:
+    # card.location is a bare city/area name (e.g. "Bekasi"), NOT a full
+    # hospital name — unusable for hospital-row matching. The real branch
+    # name(s) live inside each ".schedule-item" block's
+    # ".schedule-hospital" div in the doctor's schedule HTML (e.g.
+    # "Primaya Hospital Bekasi Timur") — confirmed in Fase 4.5 pipeline
+    # testing this is where the actual matchable name is. Reuse the
+    # schedule parser's hospital-scoped extraction (its dict keys ARE the
+    # branch names) so this stays in sync with however that HTML is
+    # walked, rather than re-implementing the selectolax traversal here.
+    by_hospital = parse_schedule_entries_by_hospital(record.raw_schedule_entries, source="primaya") or {}
+    if by_hospital:
+        return list(by_hospital.keys())
+
+    # Fallback: no schedule HTML at all (confirmed real case — some
+    # Primaya doctors' schedule_html is empty). Bare city name is all
+    # that's left; keep it rather than dropping the record, since
+    # unmatched-by-city is still a documented, visible outcome (spec
+    # §3.1) rather than silently discarding the doctor.
+    card = record.raw_payload.get("card", {})
+    location = card.get("location", "")
+    return [location] if location else []
+
+
+def _hospital_names_eka(record: RawDoctorRecord) -> list[str]:
+    card = record.raw_payload.get("card", {})
+    location = card.get("location", "")
+    # Eka's location can be a comma-joined multi-branch string (e.g.
+    # "RSIA Eka Hospital PIK, RSIA Eka Hospital Pluit") — split it.
+    return [part.strip() for part in location.split(",") if part.strip()]
+
+
+_HOSPITAL_NAME_EXTRACTORS = {
+    "siloam": _hospital_names_siloam,
+    "mitra_keluarga": _hospital_names_mitra_keluarga,
+    "hermina": _hospital_names_hermina,
+    "emc": _hospital_names_emc,
+    "mayapada": _hospital_names_mayapada,
+    "bethsaida": _hospital_names_bethsaida,
+    "rs_pondok_indah": _hospital_names_rs_pondok_indah,
+    "brawijaya": _hospital_names_brawijaya,
+    "primaya": _hospital_names_primaya,
+    "eka": _hospital_names_eka,
+}
+
+
+def extract_hospital_names(record: RawDoctorRecord, *, source: str) -> list[str]:
+    """Return every raw hospital-name string this record's doctor
+    practices at, per that source's raw_payload shape. Empty list (never
+    a guess) if the source has no registered extractor or the payload
+    doesn't contain what's expected.
+    """
+    extractor = _HOSPITAL_NAME_EXTRACTORS.get(source)
+    if extractor is None:
+        return []
+    try:
+        return extractor(record)
+    except (AttributeError, TypeError, KeyError):
+        log.warning("pipeline_hospital_name_extraction_failed", source=source, raw_name=record.raw_name)
+        return []
+
+
+# --- hospital matching -----------------------------------------------------
+
+
+def _load_hospital_name_alias_overrides() -> dict[str, str]:
+    """Manual overrides mapping a scraper-reported hospital name straight
+    to a registry Hospital.name_normalized value, bypassing fuzzy
+    matching entirely. For confirmed-by-a-human name pairs that fuzzy
+    matching structurally cannot get right — e.g. compound place names
+    reported in swapped word order ("RS Pondok Indah - Puri Indah" vs
+    OSM's "RSU Puri Indah Pondok Indah"): token_sort_ratio scores these
+    100 (order-insensitive) but plain ratio only ~65 (order-sensitive),
+    and match_hospital_by_name deliberately takes min(the two) to guard
+    against a DIFFERENT failure mode (unrelated same-token-bag names) —
+    loosening that threshold generally would risk new false positives
+    elsewhere, so a targeted alias override is the correct fix for this
+    specific confirmed pair (spec's Tier-3 manual override mechanism).
+
+    Keyed by entity_type="hospital", field="hospital_name_alias" rows in
+    config/manual_overrides.csv, entity_key = the scraper-reported raw
+    name, override_value = the target Hospital's raw name (normalized
+    here for the lookup).
+    """
+    from src.scrapers.manual import load_manual_overrides
+
+    aliases = {}
+    for o in load_manual_overrides():
+        if o.entity_type == "hospital" and o.field == "hospital_name_alias":
+            aliases[o.entity_key] = normalize_hospital_name(o.override_value)
+    return aliases
+
+
+_HOSPITAL_NAME_ALIAS_OVERRIDES = _load_hospital_name_alias_overrides()
+
+
+def match_hospital_by_name(
+    session: Session, raw_hospital_name: str, *, preferred_group: str | None = None
+) -> Hospital | None:
+    """Find the best-matching Hospital row for a scraper-reported hospital
+    name string. Returns None (never a low-confidence guess persisted
+    silently) if nothing clears HOSPITAL_MATCH_THRESHOLD — callers must
+    treat that as "unmatched", not "matched to something".
+
+    Restricting the candidate pool to `preferred_group` when given
+    (almost always available, since every adapter is written for one
+    specific hospital group) keeps this fast and avoids cross-group
+    false positives — spec §9 Fase 1 dedup already established these
+    hospital names ARE ambiguous/similar across unrelated groups (e.g.
+    generic "RS Harapan"-style names), so narrowing the search space
+    first is not just a performance optimization but a correctness one.
+    """
+    if raw_hospital_name in _HOSPITAL_NAME_ALIAS_OVERRIDES:
+        normalized_target = _HOSPITAL_NAME_ALIAS_OVERRIDES[raw_hospital_name]
+    else:
+        normalized_target = normalize_hospital_name(raw_hospital_name)
+    if not normalized_target:
+        return None
+
+    query = select(Hospital)
+    if preferred_group:
+        query = query.where(Hospital.preferred_rank_group == preferred_group)
+    candidates = session.execute(query).scalars().all()
+
+    best_hospital: Hospital | None = None
+    best_score = 0.0
+    for hospital in candidates:
+        candidate_norm = hospital.name_normalized
+        score = min(
+            fuzz.token_sort_ratio(normalized_target, candidate_norm),
+            fuzz.ratio(normalized_target, candidate_norm),
+        )
+        if score > best_score:
+            best_score = score
+            best_hospital = hospital
+
+    if best_score >= HOSPITAL_MATCH_THRESHOLD:
+        return best_hospital
+    return None
+
+
+# --- persistence -----------------------------------------------------------
+
+
+def persist_doctor_record(
+    session: Session,
+    record: RawDoctorRecord,
+    *,
+    hospital: Hospital,
+    source: str,
+    source_tier: SourceTier = SourceTier.TIER_1_OFFICIAL,
+    raw_hospital_name: str | None = None,
+) -> Doctor | None:
+    """Persist one already-hospital-resolved RawDoctorRecord as a Doctor
+    row (+ its ScheduleSlot rows), after Fase 4.1 credential validation.
+    Returns None (creates nothing) if the record doesn't validate as a
+    dermatologist — this is the credential parser acting as a
+    validator/cross-check even for Tier 1 sources already filtered by
+    speciality (spec Appendix A "Implikasi desain penting").
+
+    raw_hospital_name: the specific branch name this call is persisting
+    for (as extracted by extract_hospital_names(), BEFORE fuzzy-matching
+    to `hospital`). Required to get branch-scoped schedule slots for
+    multi-branch sources (Hermina/RSPI/Primaya) via
+    parse_schedule_entries_by_hospital() — without it, or for sources not
+    in that dispatch table, falls back to parse_schedule_entries()'s
+    flat/pooled result, which is already correct for single-branch-per-
+    record sources.
+    """
+    credential_text = record.raw_credentials_text or record.raw_name
+    if not is_dermatologist_credential(credential_text):
+        log.warning(
+            "pipeline_doctor_failed_credential_check",
+            source=source,
+            raw_name=record.raw_name,
+            hospital=hospital.name,
+        )
+        return None
+
+    now = dt.datetime.now(dt.timezone.utc)
+    person_key = normalize_person_key(record.raw_name)
+
+    doctor = Doctor(
+        hospital_id=hospital.id,
+        raw_name=record.raw_name,
+        clean_name=person_key.title() if person_key else None,
+        normalized_person_key=person_key or None,
+        credentials_json="[]",  # structured credential extraction is a future refinement; raw_name retains the full string
+        is_dermatologist=True,
+        source_url=record.source_url or None,
+        source_tier=source_tier,
+        scraped_at=now,
+    )
+    session.add(doctor)
+    session.flush()  # populate doctor.id for the ScheduleSlot rows below
+
+    by_hospital = parse_schedule_entries_by_hospital(record.raw_schedule_entries, source=source)
+    if by_hospital is not None and raw_hospital_name is not None:
+        # Branch-aware source: only this branch's own slots, not every
+        # branch's slots pooled together (see docstring).
+        parsed_slots = by_hospital.get(raw_hospital_name, [])
+    else:
+        parsed_slots = parse_schedule_entries(record.raw_schedule_entries, source=source)
+
+    for slot in parsed_slots:
+        session.add(
+            ScheduleSlot(
+                doctor_id=doctor.id,
+                hospital_id=hospital.id,
+                day_of_week=slot.day_of_week,
+                start_time=slot.start_time,
+                end_time=slot.end_time,
+                raw_text=slot.raw_text,
+                parse_confidence=_CONFIDENCE_MAP[slot.parse_confidence],
+                source_url=record.source_url or None,
+                scraped_at=now,
+            )
+        )
+
+    log.info(
+        "pipeline_doctor_persisted",
+        source=source,
+        raw_name=record.raw_name,
+        hospital=hospital.name,
+        n_schedule_slots=len(parsed_slots),
+    )
+    return doctor
+
+
+def persist_raw_doctor_records(
+    session: Session,
+    records: list[RawDoctorRecord],
+    *,
+    source: str,
+    preferred_group: str | None,
+    source_tier: SourceTier = SourceTier.TIER_1_OFFICIAL,
+) -> dict:
+    """Full pipeline for a batch of RawDoctorRecord from one adapter's
+    fetch_all_dermatology_doctors(): extract hospital name(s) per record,
+    fuzzy-match each to a registry Hospital, and persist. A record naming
+    multiple hospitals (a doctor practicing at several branches) produces
+    one Doctor+ScheduleSlot set per matched branch — spec §8.2 treats
+    Doctor rows as hospital-scoped, so "the same person at 2 hospitals" is
+    2 Doctor rows sharing one normalized_person_key, not 1 row.
+
+    Never raises on a single bad/unmatched record — one malformed or
+    unmatchable record must not abort an entire scrape's worth of
+    otherwise-good data (spec §3.1's "don't fake data" principle extends
+    to the pipeline's own robustness: a partial failure must be visible
+    in the summary counts, not silently swallowed OR allowed to crash
+    everything else).
+    """
+    summary = {
+        "total_records": len(records),
+        "not_dermatologist": 0,
+        "hospital_unmatched": 0,
+        "doctors_created": 0,
+        "schedule_slots_created": 0,
+        "unmatched_hospital_names": [],
+    }
+
+    for record in records:
+        if not is_dermatologist_credential(record.raw_credentials_text or record.raw_name):
+            summary["not_dermatologist"] += 1
+            continue
+
+        hospital_names = extract_hospital_names(record, source=source)
+        if not hospital_names:
+            summary["hospital_unmatched"] += 1
+            summary["unmatched_hospital_names"].append(f"{record.raw_name} (no hospital name extracted)")
+            continue
+
+        any_matched = False
+        for raw_hospital_name in hospital_names:
+            hospital = match_hospital_by_name(session, raw_hospital_name, preferred_group=preferred_group)
+            if hospital is None:
+                summary["unmatched_hospital_names"].append(raw_hospital_name)
+                continue
+
+            doctor = persist_doctor_record(
+                session,
+                record,
+                hospital=hospital,
+                source=source,
+                source_tier=source_tier,
+                raw_hospital_name=raw_hospital_name,
+            )
+            if doctor is not None:
+                any_matched = True
+                summary["doctors_created"] += 1
+                summary["schedule_slots_created"] += len(doctor.schedule_slots)
+
+        if not any_matched and hospital_names:
+            summary["hospital_unmatched"] += 1
+
+    return summary

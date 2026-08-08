@@ -357,6 +357,12 @@ def _parse_siloam(entries: list[dict]) -> list[ParsedScheduleSlot]:
 def _parse_hermina(entries: list[dict]) -> list[ParsedScheduleSlot]:
     # Hermina entries are nested: [{"<hospital>": {"<clinic>": [schedule, ...]}}]
     # per src/scrapers/hermina.py's raw_schedule_entries shape. Flatten first.
+    #
+    # NOTE: this flat form throws away which branch each slot belongs to.
+    # For a doctor practicing at >1 Hermina branch, use
+    # parse_schedule_entries_by_hospital() instead so each branch's
+    # Doctor row only gets its OWN slots (see that function's docstring
+    # for the bug this fixes).
     flattened: list[dict] = []
     for wrapper in entries:
         for _hospital_name, clinics in wrapper.items():
@@ -368,6 +374,10 @@ def _parse_hermina(entries: list[dict]) -> list[ParsedScheduleSlot]:
 def _parse_rspi(entries: list[dict]) -> list[ParsedScheduleSlot]:
     # RS Pondok Indah entries are nested: [{"clinics": [{"schedules": [...]}], ...}]
     # per src/scrapers/rs_pondok_indah.py's raw_schedule_entries shape.
+    #
+    # NOTE: flattens away which branch ("hospital" key on the same
+    # wrapper dict) each slot belongs to — see
+    # parse_schedule_entries_by_hospital() for the branch-aware variant.
     flattened: list[dict] = []
     for wrapper in entries:
         for clinic in wrapper.get("clinics", []):
@@ -462,10 +472,43 @@ def _parse_mayapada(entries: list[dict]) -> list[ParsedScheduleSlot]:
     return _parse_freetext_day_time(entries, source="mayapada")
 
 
+def _parse_primaya_day_rows(day_rows) -> list[ParsedScheduleSlot]:
+    """Shared per-.schedule-day-row parsing, used by both the flat
+    _parse_primaya() and the branch-aware
+    parse_schedule_entries_by_hospital() paths.
+    """
+    slots: list[ParsedScheduleSlot] = []
+    for day_row in day_rows:
+        label_node = day_row.css_first(".schedule-day-label")
+        time_node = day_row.css_first(".schedule-day-time")
+        raw_day = label_node.text(strip=True) if label_node else None
+        # The time node's text includes trailing "(Tatap Muka)" /
+        # "(Konsultasi Online)" annotations separated by <br> — take
+        # only the text before the first such annotation by splitting
+        # on "(" since the time range itself never contains one.
+        raw_time_full = time_node.text(strip=True, separator=" ") if time_node else ""
+        raw_time = raw_time_full.split("(")[0].strip()
+
+        day = normalize_day_of_week(raw_day, source="primaya")
+        ranges = parse_time_range_text(raw_time)
+        for r in ranges:
+            if day is None:
+                slots.append(ParsedScheduleSlot(None, None, None, f"{raw_day} {r.raw_text}", "low"))
+            else:
+                slots.append(ParsedScheduleSlot(day, r.start_time, r.end_time, r.raw_text, r.parse_confidence))
+    return slots
+
+
 def _parse_primaya(entries: list[dict]) -> list[ParsedScheduleSlot]:
-    # entries is [{"raw_html": "<div class='schedule-item'>...</div>"}]
+    # entries is [{"raw_html": "<div class='schedule-item'>...</div>..."}]
     # per src/scrapers/primaya.py's raw_schedule_entries shape — one
-    # element wrapping the whole per-doctor schedule HTML fragment.
+    # element wrapping the doctor's FULL schedule HTML, which itself can
+    # contain MULTIPLE ".schedule-item" blocks (one per branch the doctor
+    # practices at — confirmed in Fase 4.5 pipeline testing: some doctors
+    # have 2). This flat form pools every branch's day-rows together —
+    # see parse_schedule_entries_by_hospital() for the branch-aware
+    # variant that keeps each branch's slots separate.
+    #
     # We import selectolax lazily here rather than at module top-level so
     # parsing/schedule.py doesn't require an HTML parser dependency for
     # sources that never need it.
@@ -477,24 +520,7 @@ def _parse_primaya(entries: list[dict]) -> list[ParsedScheduleSlot]:
         if not html:
             continue
         tree = HTMLParser(html)
-        for day_row in tree.css(".schedule-day-row"):
-            label_node = day_row.css_first(".schedule-day-label")
-            time_node = day_row.css_first(".schedule-day-time")
-            raw_day = label_node.text(strip=True) if label_node else None
-            # The time node's text includes trailing "(Tatap Muka)" /
-            # "(Konsultasi Online)" annotations separated by <br> — take
-            # only the text before the first such annotation by splitting
-            # on "(" since the time range itself never contains one.
-            raw_time_full = time_node.text(strip=True, separator=" ") if time_node else ""
-            raw_time = raw_time_full.split("(")[0].strip()
-
-            day = normalize_day_of_week(raw_day, source="primaya")
-            ranges = parse_time_range_text(raw_time)
-            for r in ranges:
-                if day is None:
-                    slots.append(ParsedScheduleSlot(None, None, None, f"{raw_day} {r.raw_text}", "low"))
-                else:
-                    slots.append(ParsedScheduleSlot(day, r.start_time, r.end_time, r.raw_text, r.parse_confidence))
+        slots.extend(_parse_primaya_day_rows(tree.css(".schedule-day-row")))
     return slots
 
 
@@ -511,3 +537,94 @@ _SOURCE_PARSERS = {
     # "eka" intentionally absent — that source never has schedule data
     # (spec §3.1: absence must stay absent, not default to some shape).
 }
+
+
+# --- hospital-scoped schedule parsing (multi-branch doctors) -------------
+#
+# Hermina, RS Pondok Indah, and Primaya can all report ONE doctor
+# practicing at SEVERAL branches within the same raw record, and their
+# raw shapes keep each branch's schedule separately (nested under a
+# hospital-name key, or a hospital-tagged wrapper dict, or a distinct
+# ".schedule-item" HTML block). The flat _parse_* functions above pool
+# every branch's slots into one list, which is correct for
+# single-branch-per-record sources but WRONG here: it would attach
+# branch A's schedule to branch B's Doctor row too. This dispatch table
+# preserves the branch boundary the raw payload already has.
+#
+# Sources not listed here either report exactly one hospital per record
+# (so the flat parser is already branch-correct) or have no schedule
+# data at all (Eka).
+
+
+def _parse_hermina_by_hospital(entries: list[dict]) -> dict[str, list[ParsedScheduleSlot]]:
+    result: dict[str, list[ParsedScheduleSlot]] = {}
+    for wrapper in entries:
+        for hospital_name, clinics in wrapper.items():
+            flattened: list[dict] = []
+            for _clinic_name, schedule_list in clinics.items():
+                flattened.extend(schedule_list)
+            slots = _parse_structured_hms(
+                flattened, source="hermina", day_key="day", start_key="from_time", end_key="to_time"
+            )
+            result.setdefault(hospital_name, []).extend(slots)
+    return result
+
+
+def _parse_rspi_by_hospital(entries: list[dict]) -> dict[str, list[ParsedScheduleSlot]]:
+    result: dict[str, list[ParsedScheduleSlot]] = {}
+    for wrapper in entries:
+        hospital_name = wrapper.get("hospital", "")
+        if not hospital_name:
+            continue
+        flattened: list[dict] = []
+        for clinic in wrapper.get("clinics", []):
+            flattened.extend(clinic.get("schedules", []))
+        slots = _parse_structured_hms(
+            flattened, source="rs_pondok_indah", day_key="day", start_key="time_from", end_key="time_to"
+        )
+        result.setdefault(hospital_name, []).extend(slots)
+    return result
+
+
+def _parse_primaya_by_hospital(entries: list[dict]) -> dict[str, list[ParsedScheduleSlot]]:
+    from selectolax.parser import HTMLParser
+
+    result: dict[str, list[ParsedScheduleSlot]] = {}
+    for wrapper in entries:
+        html = wrapper.get("raw_html", "")
+        if not html:
+            continue
+        tree = HTMLParser(html)
+        for item in tree.css(".schedule-item"):
+            hospital_node = item.css_first(".schedule-hospital")
+            hospital_name = hospital_node.text(strip=True) if hospital_node else ""
+            if not hospital_name:
+                continue
+            slots = _parse_primaya_day_rows(item.css(".schedule-day-row"))
+            result.setdefault(hospital_name, []).extend(slots)
+    return result
+
+
+_SOURCE_PARSERS_BY_HOSPITAL = {
+    "hermina": _parse_hermina_by_hospital,
+    "rs_pondok_indah": _parse_rspi_by_hospital,
+    "primaya": _parse_primaya_by_hospital,
+}
+
+
+def parse_schedule_entries_by_hospital(entries: list[dict], *, source: str) -> dict[str, list[ParsedScheduleSlot]] | None:
+    """Branch-aware variant of parse_schedule_entries(): returns
+    {raw_hospital_name: [ParsedScheduleSlot, ...]} instead of one pooled
+    list, for sources whose raw payload keeps multiple branches' data
+    separate within a single doctor record.
+
+    Returns None (not an empty dict) for any source not in
+    _SOURCE_PARSERS_BY_HOSPITAL — callers should treat None as "this
+    source doesn't need branch-scoping, use parse_schedule_entries()
+    (already branch-correct because those sources report one hospital
+    per record)" rather than "this doctor has zero schedule".
+    """
+    parser = _SOURCE_PARSERS_BY_HOSPITAL.get(source)
+    if parser is None:
+        return None
+    return parser(entries)
