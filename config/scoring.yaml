@@ -1,0 +1,28 @@
+# Bobot dan threshold untuk opportunity_score Layer A (spec §10 Fase 7).
+#
+# PENTING:
+# - Bobot ini bersifat HIPOTESIS/editable, bukan hasil kalibrasi statistik.
+# - Skor ini HANYA boleh menilai ruang praktik internal RS. Jangan pernah
+#   memasukkan populasi, income proxy, office density, atau brand preference
+#   ke sini (itu wilayah market_attractiveness / practice_fit).
+
+core_opportunity:
+  dermatologist_count_scarcity: 0.20
+  doctor_hours_scarcity: 0.30
+  prime_time_gap: 0.35
+  weekend_gap: 0.15
+
+# Metode normalisasi peer-relative (spec §7.1). "percentile" = rank RS di
+# dalam universe aktif (Preferred Private / All Private / All Hospitals)
+# lalu ubah ke 0-1. "winsorized_zscore" tersedia untuk fase lanjut bila
+# outlier ekstrem mengganggu percentile ranking.
+normalization_method: percentile
+winsorize_limits: [0.05, 0.05]
+
+# Descriptive flag saja (bukan definisi tunggal opportunity) — spec §7.3.
+low_dermatologist_count_flag_threshold: 4
+
+# Skor tidak dihitung (score_status = insufficient_data) bila proporsi
+# jadwal dokter kulit RS yang berhasil di-parse dengan confidence memadai
+# di bawah angka ini (spec §7.5).
+minimum_schedule_completeness: 0.70

@@ -1,0 +1,24 @@
+# Definisi prime-time window (spec §10 Fase 6).
+#
+# PENTING: ini adalah operational assumption, BUKAN fakta epidemiologis.
+# Boleh diubah kapan saja tanpa perlu justifikasi klinis — pengaruhnya hanya
+# ke bagaimana slot jadwal dikelompokkan untuk metrik coverage/gap.
+#
+# day_of_week: 0=Senin ... 6=Minggu (konsisten dengan ScheduleSlot.day_of_week)
+
+weekday_evening:
+  days: [0, 1, 2, 3, 4]
+  start: "17:00"
+  end: "21:00"
+
+saturday:
+  days: [5]
+  start: "08:00"
+  end: "14:00"
+
+# Window akhir pekan penuh, dipakai untuk weekend_gap_ratio / weekend_doctor_hours.
+# Sabtu & Minggu, jam operasional umum RS (07:00-21:00).
+weekend_full:
+  days: [5, 6]
+  start: "07:00"
+  end: "21:00"

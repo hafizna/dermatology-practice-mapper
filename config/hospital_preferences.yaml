@@ -1,0 +1,31 @@
+# Preferred hospital universe (spec §5).
+#
+# Menentukan RS mana yang masuk ke ranking mode "Preferred Private" (default).
+# Semua RS tetap masuk master registry terlepas dari daftar ini — file ini
+# hanya menambahkan flag `is_preferred_group`, bukan filter registry.
+
+preferred_groups:
+  - Eka Hospital
+  - Siloam
+  - Mitra Keluarga
+  - RS Pondok Indah
+  - Mayapada
+  - EMC
+  - Primaya
+  - Bethsaida
+  - Brawijaya
+  - Hermina
+
+include_ownership:
+  - swasta
+
+exclude_hospital_types: []
+
+# Opsional dan SUBJEKTIF (preferensi pribadi pengguna). Jangan diperlakukan
+# sebagai fakta pasar. Dipakai hanya oleh `practice_fit_score` di V3 —
+# dilarang keras dimasukkan ke `opportunity_score` Layer A (spec §5, §7).
+manual_preference:
+  Eka Hospital: 1.00
+  RS Pondok Indah: 1.00
+  Siloam: 0.95
+  Mayapada: 0.95

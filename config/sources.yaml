@@ -1,0 +1,123 @@
+# Registry sumber data dan aturan hormat-sumber (spec §3.6, §3.7, Fase 2-3).
+#
+# Setiap entry di sini adalah declaration, bukan implementasi. Adapter
+# scraper (src/scrapers/<group>.py) membaca base_urls dari sini agar tidak
+# ada URL yang hardcoded di dalam kode parser.
+
+crawl_policy:
+  respect_robots_txt: true
+  rate_limit_seconds_per_domain: 2
+  user_agent: "DermPracticeMapper/0.1 (research tool; contact: hafizna.arsyil@gmail.com)"
+  max_retries: 3
+  backoff_factor: 2.0
+  allow_playwright_if_js_required: true
+  allow_evasion_techniques: false   # tidak pernah diaktifkan (spec §3.6)
+
+# Tier 1 = situs resmi RS/grup RS
+# Tier 2 = aggregator (fallback saja)
+# Tier 3 = manual override (prioritas tertinggi untuk field yang di-override,
+#          tapi nilai scraper tetap disimpan untuk audit — spec Fase 3)
+source_tiers:
+  tier_1: "official_hospital_site"
+  tier_2: "aggregator"
+  tier_3: "manual_override"
+
+registry_sources:
+  overpass:
+    tier: tier_1
+    base_url: "https://overpass-api.de/api/interpreter"
+    query_tag: "amenity=hospital"
+    # Verifikasi ulang bbox ini sebelum dianggap final — lihat catatan
+    # Fase 1 di PROJECT_SPEC.md §"Overpass API". Format: (south,west,north,east)
+    bbox_jabodetabek: "-6.50,106.55,-5.95,107.10"
+  kemkes:
+    tier: tier_1
+    base_url: "https://rs.kemkes.go.id"
+    notes: >
+      Cari endpoint API/structured terlebih dahulu sebelum HTML parsing
+      (spec §3.7). Jangan dijadikan satu-satunya sumber registry.
+
+# Target group untuk adapter dokter/jadwal (Fase 2-3). URL bersifat
+# reconnaissance per Agustus 2026 (Appendix A) — WAJIB diverifikasi ulang
+# sebelum dipakai menulis parser karena struktur situs dapat berubah.
+doctor_schedule_sources:
+  eka:
+    tier: tier_1
+    display_name: "Eka Hospital"
+    base_urls:
+      - "https://booking.ekahospital.com"
+    requires_js: false
+    notes: >
+      Pola URL per RS: /hospital/{slug-rs}/{slug-spesialisasi}. Slug
+      spesialisasi tidak konsisten antar cabang (kulit-dan-kelamin vs
+      dermatologi-venerologi) — jangan hardcode, enumerasi dari navigation.
+      Kandidat adapter pilot pertama (Fase 2).
+  siloam:
+    tier: tier_1
+    display_name: "Siloam Hospitals"
+    base_urls:
+      - "https://www.siloamhospitals.com"
+    requires_js: true
+    notes: >
+      Pola URL pernah: /cari-dokter/dermatologi-kulit/rumah-sakit/{slug-rs}.
+      HTTP sederhana pernah kena bot detection — cek endpoint JSON dulu,
+      lalu Playwright normal, jangan evasion. Berhenti & laporkan jika
+      masih diblokir.
+  mitra_keluarga:
+    tier: tier_1
+    display_name: "Mitra Keluarga"
+    base_urls: []
+    requires_js: null
+    notes: "Belum direconnaissance — verifikasi struktur situs sebelum adapter ditulis."
+  hermina:
+    tier: tier_1
+    display_name: "Hermina"
+    base_urls: []
+    requires_js: null
+    notes: "Belum direconnaissance."
+  primaya:
+    tier: tier_1
+    display_name: "Primaya"
+    base_urls: []
+    requires_js: null
+    notes: "Belum direconnaissance."
+  emc:
+    tier: tier_1
+    display_name: "EMC"
+    base_urls: []
+    requires_js: null
+    notes: "Belum direconnaissance."
+  bethsaida:
+    tier: tier_1
+    display_name: "Bethsaida"
+    base_urls: []
+    requires_js: null
+    notes: "Belum direconnaissance."
+  rs_pondok_indah:
+    tier: tier_1
+    display_name: "RS Pondok Indah"
+    base_urls: []
+    requires_js: null
+    notes: "Belum direconnaissance."
+  mayapada:
+    tier: tier_1
+    display_name: "Mayapada"
+    base_urls: []
+    requires_js: null
+    notes: "Belum direconnaissance."
+  brawijaya:
+    tier: tier_1
+    display_name: "Brawijaya"
+    base_urls: []
+    requires_js: null
+    notes: "Belum direconnaissance."
+
+aggregator_sources:
+  alodokter:
+    tier: tier_2
+    base_urls: ["https://www.alodokter.com"]
+    notes: "Fallback saja, untuk RS tanpa sumber resmi memadai."
+  halodoc:
+    tier: tier_2
+    base_urls: ["https://www.halodoc.com"]
+    notes: "Fallback saja, untuk RS tanpa sumber resmi memadai."

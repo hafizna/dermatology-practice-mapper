@@ -1,0 +1,42 @@
+# --- Doctor / patient-adjacent data must never enter the repo (spec §3.8) ---
+data/raw/
+data/processed/
+*.sqlite
+*.sqlite3
+*.db
+data/cache/
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+.coverage.*
+
+# --- Playwright ---
+playwright-report/
+test-results/
+
+# --- Logs ---
+logs/
+*.log
+
+# --- OS / editor ---
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# --- Secrets / local env ---
+.env
+.env.*
+!.env.example
