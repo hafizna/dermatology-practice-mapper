@@ -90,7 +90,13 @@ def _load_dashboard_dataframe(universe: str) -> pd.DataFrame:
                     "Derm": metrics.n_dermatologists_unique if metrics else None,
                     "Sessions/wk": metrics.n_sessions_week if metrics else None,
                     "Derm hrs/wk": metrics.doctor_hours_week if metrics else None,
-                    "Prime coverage": metrics.coverage_ratio_prime if metrics else None,
+                    # Ditampilkan sebagai GAP (rasio jam ramai yang masih
+                    # KOSONG dari dokter kulit), bukan coverage (rasio
+                    # yang sudah terisi) -- supaya arah bacanya konsisten
+                    # dengan "Sat/weekend gap" dan "Opportunity" di
+                    # tabel yang sama: makin TINGGI = makin besar
+                    # peluang, bukan sebaliknya.
+                    "Gap jam ramai": metrics.prime_gap_ratio if metrics else None,
                     "Sat/weekend gap": metrics.weekend_gap_ratio if metrics else None,
                     "Opportunity": metrics.opportunity_score if metrics else None,
                     "score_status": metrics.score_status.value if metrics else "insufficient_data",
@@ -173,8 +179,10 @@ selected_kota = st.sidebar.multiselect("Kota/Kabupaten", options=kota_options, d
 group_options = sorted(df["Group"].dropna().unique().tolist())
 selected_groups = st.sidebar.multiselect("Hospital group", options=group_options, default=[])
 
-class_options = sorted(df["hospital_class"].dropna().unique().tolist())
-selected_classes = st.sidebar.multiselect("Kelas RS", options=class_options, default=[])
+# Filter "Kelas RS" (spec §8.1) sengaja TIDAK ditampilkan -- data
+# hospital_class tidak tersedia sama sekali dari OSM (sumber Fase 1),
+# selalu "Tidak diketahui" untuk semua 554 RS. Filter yang selalu punya
+# satu pilihan kosong cuma bikin bingung, bukan berguna.
 
 min_derm = st.sidebar.number_input("Jumlah dokter minimum", min_value=0, value=0, step=1)
 
@@ -188,8 +196,6 @@ if selected_kota:
     filtered = filtered[filtered["kota_kab"].isin(selected_kota)]
 if selected_groups:
     filtered = filtered[filtered["Group"].isin(selected_groups)]
-if selected_classes:
-    filtered = filtered[filtered["hospital_class"].isin(selected_classes)]
 if min_derm > 0:
     filtered = filtered[filtered["Derm"].fillna(0) >= min_derm]
 if selected_quality:
@@ -222,7 +228,7 @@ with tab_ranking:
         "Derm",
         "Sessions/wk",
         "Derm hrs/wk",
-        "Prime coverage",
+        "Gap jam ramai",
         "Sat/weekend gap",
         "Opportunity",
         "Data quality",
@@ -349,10 +355,10 @@ with tab_map:
         "Metrik warna marker",
         options=["Opportunity", "Derm", "Derm hrs/wk", "prime_gap_ratio_display"],
         format_func=lambda m: {
-            "Opportunity": "Opportunity score",
-            "Derm": "Doctor count",
-            "Derm hrs/wk": "Doctor-hours/week",
-            "prime_gap_ratio_display": "Prime-time gap",
+            "Opportunity": "Skor opportunity",
+            "Derm": "Jumlah dokter",
+            "Derm hrs/wk": "Jam dokter/minggu",
+            "prime_gap_ratio_display": "Gap jam ramai",
         }[m],
     )
     st.caption(
@@ -392,10 +398,9 @@ with tab_map:
             popup_html = (
                 f"<b>{r['Hospital']}</b><br>"
                 f"Group: {r['Group']}<br>"
-                f"Kelas: {r['hospital_class']}<br>"
                 f"Derm: {r['Derm'] if pd.notna(r['Derm']) else 'unknown'}<br>"
                 f"Derm hrs/wk: {r['Derm hrs/wk'] if pd.notna(r['Derm hrs/wk']) else 'unknown'}<br>"
-                f"Prime coverage: {r['Prime coverage'] if pd.notna(r['Prime coverage']) else 'unknown'}<br>"
+                f"Gap jam ramai: {r['Gap jam ramai'] if pd.notna(r['Gap jam ramai']) else 'unknown'}<br>"
                 f"Opportunity: {r['Opportunity'] if pd.notna(r['Opportunity']) else 'insufficient_data'}<br>"
                 f"Data quality: {r['Data quality']}"
             )

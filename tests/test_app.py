@@ -100,7 +100,7 @@ def test_app_ranking_table_has_expected_columns():
         "Derm",
         "Sessions/wk",
         "Derm hrs/wk",
-        "Prime coverage",
+        "Gap jam ramai",
         "Sat/weekend gap",
         "Opportunity",
         "Data quality",

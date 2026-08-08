@@ -208,6 +208,39 @@ def test_match_uses_coordinate_qualified_alias_when_name_is_ambiguous(db_session
     assert result.id == right_one.id
 
 
+def test_match_uses_coordinate_qualified_alias_for_mayapada_tangerang(db_session):
+    # Same coordinate-qualified alias mechanism, different real case
+    # (dashboard review 2026-08-09): OSM has two "Mayapada Hospital" rows
+    # (one confirmed Tangerang by address, one unconfirmed near Kuningan)
+    # — "Mayapada Hospital Tangerang" from the scraper must resolve to
+    # the address-confirmed one, not whichever "Mayapada Hospital" row
+    # match_hospital_by_name's plain name lookup happens to find first.
+    from src.parsing.hospital_names import normalize_hospital_name
+
+    tangerang = Hospital(
+        name="Mayapada Hospital",
+        name_normalized=normalize_hospital_name("Mayapada Hospital"),
+        aliases_json="[]",
+        preferred_rank_group="Mayapada",
+        lat=-6.2050819,
+        lon=106.6416332,
+    )
+    unconfirmed = Hospital(
+        name="Mayapada Hospital",
+        name_normalized=normalize_hospital_name("Mayapada Hospital"),
+        aliases_json="[]",
+        preferred_rank_group="Mayapada",
+        lat=-6.2981069,
+        lon=106.7859833,
+    )
+    db_session.add_all([tangerang, unconfirmed])
+    db_session.flush()
+
+    result = match_hospital_by_name(db_session, "Mayapada Hospital Tangerang", preferred_group="Mayapada")
+    assert result is not None
+    assert result.id == tangerang.id
+
+
 # --- persist_doctor_record: credential gate -------------------------------
 
 
