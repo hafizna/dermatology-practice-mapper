@@ -1,0 +1,89 @@
+{
+  "data": [
+    {
+      "fullname_doctor": "dr. Anonim Contoh Duapuluhlima, Sp. D.V.E, FINSDV",
+      "doctor_name": "Anonim Contoh Duapuluhlima, dr. Sp. D.V.E, FINSDV",
+      "doctor_code": "D9001",
+      "img_url": "https://example.com/img.jpg",
+      "specialty": "Spesialis Kulit dan Kelamin ",
+      "doctor_schedule": [
+        {
+          "clinics": [
+            {
+              "clinic_name": "Dermatology",
+              "schedules": [
+                {"day": "Monday", "time_from": "14:00:00", "time_to": "20:00:00"},
+                {"day": "Tuesday", "time_from": "09:00:00", "time_to": "15:00:00"}
+              ]
+            }
+          ],
+          "doctor_type": "A",
+          "hospital": "RS Pondok Indah - Puri Indah",
+          "hospital_code": "H2",
+          "quota": 100,
+          "telephone_number": "+62212569 5200"
+        }
+      ]
+    },
+    {
+      "fullname_doctor": "dr. Anonim Contoh Duapuluhenam, Sp. D.V.E",
+      "doctor_name": "Anonim Contoh Duapuluhenam, dr. Sp. D.V.E",
+      "doctor_code": "D9002",
+      "img_url": "https://example.com/img2.jpg",
+      "specialty": "Spesialis Kulit dan Kelamin ",
+      "doctor_schedule": [
+        {
+          "clinics": [
+            {
+              "clinic_name": "Dermatology",
+              "schedules": [
+                {"day": "Wednesday", "time_from": "09:00:00", "time_to": "12:00:00"}
+              ]
+            }
+          ],
+          "doctor_type": "A",
+          "hospital": "RS Pondok Indah - Surabaya",
+          "hospital_code": "H9",
+          "quota": 50,
+          "telephone_number": "+6231000000"
+        }
+      ]
+    },
+    {
+      "fullname_doctor": "dr. Anonim Contoh Duapuluhtujuh, Sp.DVE",
+      "doctor_name": "Anonim Contoh Duapuluhtujuh, dr. Sp.DVE",
+      "doctor_code": "D9003",
+      "img_url": "https://example.com/img3.jpg",
+      "specialty": "Spesialis Kulit dan Kelamin ",
+      "doctor_schedule": [
+        {
+          "clinics": [{"clinic_name": "Dermatology", "schedules": [{"day": "Friday", "time_from": "13:00:00", "time_to": "17:00:00"}]}],
+          "doctor_type": "A",
+          "hospital": "RS Pondok Indah - Bintaro Jaya",
+          "hospital_code": "H3",
+          "quota": 100,
+          "telephone_number": "+622180828888"
+        },
+        {
+          "clinics": [{"clinic_name": "Dermatology", "schedules": [{"day": "Saturday", "time_from": "08:00:00", "time_to": "12:00:00"}]}],
+          "doctor_type": "A",
+          "hospital": "RS Pondok Indah - Pondok Indah",
+          "hospital_code": "H1",
+          "quota": 100,
+          "telephone_number": "+622176588399"
+        }
+      ]
+    }
+  ],
+  "pagination": {
+    "clinic_category": "Kulit & Kelamin & Estetik",
+    "count": 3,
+    "day": "",
+    "hospital_code": "",
+    "is_active": "true",
+    "limit": 100,
+    "offset": 0,
+    "page": 1,
+    "total_page": 1
+  }
+}
