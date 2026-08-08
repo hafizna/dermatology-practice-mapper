@@ -16,6 +16,7 @@ from __future__ import annotations
 
 from src.logging_setup import get_logger
 from src.scrapers import eka as eka_module
+from src.scrapers.emc import EmcScraper
 from src.scrapers.hermina import HerminaScraper
 from src.scrapers.mitra_keluarga import MitraKeluargaScraper
 from src.scrapers.primaya import PrimayaScraper
@@ -31,6 +32,7 @@ ADAPTERS: dict[str, object] = {
     "mitra_keluarga": MitraKeluargaScraper,
     "hermina": HerminaScraper,
     "primaya": PrimayaScraper,
+    "emc": EmcScraper,
     "eka": eka_module,  # manual snapshot, not a BaseScraper subclass
 }
 
