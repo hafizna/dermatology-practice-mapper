@@ -1,0 +1,7 @@
+{
+  "ok": true,
+  "data": [
+    {"rsid": 7, "name_hospital": "Brawijaya Hospital - Antasari", "address_hospital": "<p>Jakarta Selatan</p>"},
+    {"rsid": 19, "name_hospital": "Brawijaya Hospital - Saharjo", "address_hospital": "<p>Jakarta Selatan</p>"}
+  ]
+}

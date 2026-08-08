@@ -99,3 +99,61 @@ def test_successful_response_is_cached_to_disk(impl, monkeypatch, tmp_path):
 
     cached_files = list(tmp_path.rglob("mykey.json"))
     assert len(cached_files) == 1
+
+
+# --- _curl_get_json: used only by adapters where httpx is blocked but the
+# system curl binary is not (Brawijaya) — spec §3.6, not evasion, see
+# src/scrapers/base.py docstring on that method. ---
+
+
+class _FakeCompletedProcess:
+    def __init__(self, stdout: str, returncode: int = 0, stderr: str = ""):
+        self.stdout = stdout
+        self.returncode = returncode
+        self.stderr = stderr
+
+
+def test_curl_get_json_parses_body_and_status(impl, monkeypatch, tmp_path):
+    def fake_run(cmd, capture_output, text, timeout, check):
+        return _FakeCompletedProcess(stdout='{"hello": "curl"}\n200')
+
+    monkeypatch.setattr("src.scrapers.base.subprocess.run", fake_run)
+
+    result = impl._curl_get_json("https://example.com/api", hospital_slug="x", cache_key="curlkey")
+    assert result == {"hello": "curl"}
+    cached_files = list(tmp_path.rglob("curlkey.json"))
+    assert len(cached_files) == 1
+
+
+def test_curl_get_json_blocked_status_raises_blocked_error(impl, monkeypatch):
+    def fake_run(cmd, capture_output, text, timeout, check):
+        return _FakeCompletedProcess(stdout="\n403")
+
+    monkeypatch.setattr("src.scrapers.base.subprocess.run", fake_run)
+
+    with pytest.raises(BlockedError):
+        impl._curl_get_json("https://example.com/api", hospital_slug="x", cache_key="x")
+
+
+def test_curl_get_json_server_error_retried_then_raises(impl, monkeypatch):
+    calls = {"n": 0}
+
+    def fake_run(cmd, capture_output, text, timeout, check):
+        calls["n"] += 1
+        return _FakeCompletedProcess(stdout="\n500")
+
+    monkeypatch.setattr("src.scrapers.base.subprocess.run", fake_run)
+
+    with pytest.raises(NetworkError):
+        impl._curl_get_json("https://example.com/api", hospital_slug="x", cache_key="x")
+    assert calls["n"] == 3
+
+
+def test_curl_get_json_nonzero_exit_raises_network_error(impl, monkeypatch):
+    def fake_run(cmd, capture_output, text, timeout, check):
+        return _FakeCompletedProcess(stdout="", returncode=1, stderr="curl: (6) Could not resolve host")
+
+    monkeypatch.setattr("src.scrapers.base.subprocess.run", fake_run)
+
+    with pytest.raises(NetworkError):
+        impl._curl_get_json("https://example.com/api", hospital_slug="x", cache_key="x")

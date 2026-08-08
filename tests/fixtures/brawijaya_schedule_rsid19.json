@@ -1,0 +1,19 @@
+{
+  "ok": true,
+  "data": [
+    {
+      "tmid": 91,
+      "specialist": "Spesialis Penyakit Kulit dan Kelamin",
+      "doctors": [
+        {
+          "pid": 8003,
+          "dokter": "dr. Anonim Contoh Tigapuluh, Sp.KK",
+          "cuti": [null],
+          "schedules": [
+            {"dsid": 3, "weekday": 3, "start_hour": "13", "start_minute": 0, "end_hour": "15", "end_minute": 30}
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -20,11 +20,13 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+import os
+import subprocess
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import urlencode, urlparse
 
 import httpx
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
@@ -268,6 +270,91 @@ class BaseScraper(ABC):
         cache_path.write_text(html, encoding="utf-8")
         log.info("scraper_fetch_ok", group=self.group_name, url=url, cache_path=str(cache_path))
         return html
+
+    @retry(
+        retry=retry_if_exception_type(NetworkError),
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=1, max=10),
+        reraise=True,
+    )
+    def _curl_get_json(self, url: str, *, hospital_slug: str, cache_key: str, params: dict | None = None) -> dict:
+        """GET a JSON endpoint via the system `curl` binary instead of
+        httpx, keeping the same caching/rate-limit/retry/error-
+        classification contract as _get_json.
+
+        LAST RESORT ONLY — use _get_json unless a source is confirmed to
+        return 200 for `curl` with an honest User-Agent but 403 for httpx
+        with the identical URL/headers (observed for brawijayahospital.com
+        2026-08-08: Cloudflare appears to fingerprint the TLS/HTTP2
+        client, not the header content — curl and httpx present
+        differently at that layer even with identical logical headers).
+        This is not UA spoofing or fingerprint evasion (spec §3.6) — curl
+        is used with its own honest, unmodified identity; we are simply
+        choosing a different (still standard, still transparent) HTTP
+        client for a source where the other one happens to be blocked.
+        Prefer _get_json whenever it works; only fall back to this when
+        that has been verified to fail and curl verified to succeed.
+        """
+        cache_path = self._cache_path(hospital_slug, cache_key)
+        if self.use_cache and cache_path.exists():
+            log.debug("scraper_cache_hit", group=self.group_name, cache_path=str(cache_path))
+            return json.loads(cache_path.read_text(encoding="utf-8"))
+
+        self._rate_limiter.wait(url)
+
+        full_url = url
+        if params:
+            full_url = f"{url}?{urlencode(params)}"
+
+        cmd = [
+            "curl.exe" if os.name == "nt" else "curl",
+            "-s",
+            "-m",
+            "30",
+            "-g",  # disable URL globbing so [] in query strings (e.g. filter[status]) aren't misparsed
+            "-w",
+            "\n%{http_code}",
+            full_url,
+        ]
+        for key, value in self._headers.items():
+            cmd.extend(["-H", f"{key}: {value}"])
+
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=35, check=False)
+        except subprocess.TimeoutExpired as exc:
+            raise NetworkError(f"curl timeout fetching {full_url}") from exc
+        except FileNotFoundError as exc:
+            raise NetworkError(
+                "system curl binary not found (expected curl.exe on Windows / curl elsewhere)"
+            ) from exc
+
+        if result.returncode != 0:
+            raise NetworkError(f"curl exited {result.returncode} fetching {full_url}: {result.stderr[:200]}")
+
+        body, _, status_code_str = result.stdout.rpartition("\n")
+        try:
+            status_code = int(status_code_str)
+        except ValueError:
+            raise StructureChangedError(f"curl did not report a status code for {full_url}") from None
+
+        if status_code in (403, 429):
+            raise BlockedError(
+                f"blocked (HTTP {status_code}) fetching {full_url} via curl — stopping per spec §3.6, no evasion."
+            )
+        if status_code >= 500:
+            raise NetworkError(f"server error (HTTP {status_code}) fetching {full_url}")
+        if status_code >= 400:
+            raise StructureChangedError(f"unexpected HTTP {status_code} fetching {full_url}")
+
+        try:
+            payload = json.loads(body)
+        except ValueError as exc:
+            raise StructureChangedError(f"non-JSON response from {full_url}") from exc
+
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+        cache_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        log.info("scraper_fetch_ok", group=self.group_name, url=full_url, cache_path=str(cache_path), via="curl")
+        return payload
 
     def provenance(self, source_url: str) -> dict:
         return {

@@ -1,0 +1,33 @@
+{
+  "ok": true,
+  "data": [
+    {
+      "tmid": 60,
+      "specialist": "Spesialis Dermatovenereologi",
+      "doctors": [
+        {
+          "pid": 8001,
+          "dokter": "dr. Anonim Contoh Duapuluhdelapan, Sp.DVE",
+          "cuti": [null],
+          "schedules": [
+            {"dsid": 1, "weekday": 1, "start_hour": "9", "start_minute": 0, "end_hour": "12", "end_minute": 0}
+          ]
+        }
+      ]
+    },
+    {
+      "tmid": 71,
+      "specialist": "Spesialis Anak",
+      "doctors": [
+        {
+          "pid": 8002,
+          "dokter": "dr. Anonim Contoh Duapuluhsembilan, Sp.A",
+          "cuti": [null],
+          "schedules": [
+            {"dsid": 2, "weekday": 2, "start_hour": "10", "start_minute": 0, "end_hour": "13", "end_minute": 0}
+          ]
+        }
+      ]
+    }
+  ]
+}

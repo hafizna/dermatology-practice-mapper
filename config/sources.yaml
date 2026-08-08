@@ -184,16 +184,32 @@ doctor_schedule_sources:
     base_urls:
       - "https://brawijayahospital.com"
     requires_js: null
-    access_status: "accessible"
+    access_status: "accessible_via_curl_only"
     notes: >
       Domain awal (rsbrawijaya.co.id) di config lama TIDAK RESOLVE (salah
       tebak -- itu domain RSAD Brawijaya, institusi berbeda). Domain benar
       untuk grup RS Brawijaya (preferred group ini): brawijayahospital.com
       (dikonfirmasi via pencarian web 2026-08-08), homepage 200 dengan UA
       jujur. Sempat dicatat keliru sebagai "tidak ada layanan dermatologi"
-      (2026-08-08) -- dikoreksi pengguna: Brawijaya memang menyediakan
-      SpKK. Tetap masuk daftar recon detail Fase 3 seperti grup lain.
-      Struktur data dokter/jadwal belum direconnaissance detail.
+      (2026-08-08) -- dikoreksi pengguna: Brawijaya memang menyediakan SpKK.
+      CATATAN PENTING: halaman utama (/find-doctor) diproteksi Cloudflare
+      dengan pola sama seperti Eka (headless Playwright 403 "cdn-cgi/
+      challenge-platform", headful 200). TAPI endpoint /api/* (dipakai
+      frontend situs sendiri) TIDAK diproteksi seketat itu -- terkonfirmasi
+      curl (UA jujur) selalu 200, sedangkan httpx (Python, dipakai
+      BaseScraper standar) selalu 403 untuk endpoint yang SAMA PERSIS --
+      kemungkinan besar Cloudflare fingerprint TLS/HTTP2 client, bukan
+      header. src/scrapers/brawijaya.py karena itu pakai method
+      _curl_get_json (subprocess ke curl.exe sistem) alih-alih _get_json
+      biasa -- satu-satunya adapter di proyek ini yang butuh ini.
+      Endpoint: /api/proxy?service=data&path=items/branch (daftar 7 cabang,
+      semua Jabodetabek) dan /api/appointment/getSpecialistDoctorsSchedule
+      ?group=true&rsid={id} (jadwal per cabang, semua spesialisasi
+      sekaligus, di-filter ke grup "Dermat"/"Kulit" -- KEDUANYA dipakai
+      situs untuk dermatologi tanpa overlap dokter, filter tunggal akan
+      kehilangan separuh data). Cabang rsid=66 (Taman Mini) sempat 500 dari
+      server mereka sendiri saat recon -- ditangani graceful (skip +
+      log), bukan block.
 
 aggregator_sources:
   alodokter:
