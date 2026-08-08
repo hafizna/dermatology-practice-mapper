@@ -25,6 +25,13 @@ from sqlalchemy.orm import Session
 from streamlit_folium import st_folium
 
 from src.db import get_engine
+from src.map_categories import (
+    MAP_METRICS,
+    calculate_category_boundaries,
+    classify_marker,
+    format_metric_legend,
+    metric_value_participates_in_scale,
+)
 from src.metrics.coverage import (
     DAY_START_MINUTES,
     N_DAYS,
@@ -372,33 +379,20 @@ with tab_map:
     st.subheader("Peta RS")
     map_metric = st.selectbox(
         "Metrik warna marker",
-        options=["Opportunity", "Derm", "Derm hrs/wk", "prime_gap_ratio_display"],
-        format_func=lambda m: {
-            "Opportunity": "Skor opportunity",
-            "Derm": "Jumlah dokter",
-            "Derm hrs/wk": "Jam dokter/minggu",
-            "prime_gap_ratio_display": "Gap jam ramai",
-        }[m],
+        options=list(MAP_METRICS),
+        format_func=lambda m: MAP_METRICS[m].label,
     )
+    metric_spec = MAP_METRICS[map_metric]
     st.caption(
         "Ukuran/warna marker TIDAK berdasarkan populasi atau demand proxy apa pun — "
         "murni metrik supply internal RS (spec §10 Fase 8.4, sebelum V2). "
         "🟢 Hijau = peluang besar · 🟠 Oranye = sedang · 🔴 Merah = peluang kecil · "
-        "⚪ Abu-abu = confirmed_zero (skor pasti karena nol dokter terkonfirmasi, "
-        "bukan hasil hitung dari data jadwal) atau data tidak tersedia."
+        "⚪ Abu-abu = data tidak tersedia; pada skor opportunity/gap juga dipakai untuk "
+        "confirmed_zero sebagai kategori khusus."
     )
 
     map_df = filtered.dropna(subset=["lat", "lon"]).copy()
-    if map_metric == "prime_gap_ratio_display":
-        engine = _get_engine()
-        with Session(engine) as session:
-            gap_lookup = {
-                row.hospital_id: row.prime_gap_ratio
-                for row in session.execute(select(HospitalPracticeMetrics)).scalars().all()
-            }
-        map_df["metric_value"] = map_df["hospital_id"].map(gap_lookup)
-    else:
-        map_df["metric_value"] = map_df[map_metric]
+    map_df["metric_value"] = map_df[metric_spec.dataframe_column]
 
     if map_df.empty:
         st.info("Tidak ada RS dengan koordinat yang cocok filter saat ini.")
@@ -406,31 +400,33 @@ with tab_map:
         center_lat, center_lon = map_df["lat"].mean(), map_df["lon"].mean()
         fmap = folium.Map(location=[center_lat, center_lon], zoom_start=10, tiles="cartodbpositron")
 
-        vals = map_df["metric_value"].dropna()
-        v_min, v_max = (vals.min(), vals.max()) if not vals.empty else (0, 1)
+        scale_values = [
+            float(r["metric_value"])
+            for _, r in map_df.iterrows()
+            if metric_value_participates_in_scale(
+                r["metric_value"],
+                data_quality=r["Data quality"],
+                spec=metric_spec,
+            )
+        ]
+        category_boundaries = calculate_category_boundaries(scale_values)
+        st.markdown(format_metric_legend(metric_spec, category_boundaries))
 
         for _, r in map_df.iterrows():
             value = r["metric_value"]
-            # RS confirmed_zero (nol dokter TERKONFIRMASI) selalu dapat
-            # opportunity_score=1.0 by design (skor pasti/maksimal by
-            # aturan, bukan hasil kalkulasi dari data jadwal riil seperti
-            # RS lain) -- diberi abu-abu terpisah supaya tidak tercampur
-            # visual dengan RS yang skornya tinggi karena data jadwal
-            # sungguhan menunjukkan banyak gap (user review 2026-08-09).
-            if r["Data quality"] == "confirmed_zero" or pd.isna(value):
-                color = "gray"
-            else:
-                frac = (value - v_min) / (v_max - v_min) if v_max > v_min else 0.5
-                # Semua metrik peta (Opportunity, Derm, Derm hrs/wk, Gap
-                # jam ramai) bermakna "makin tinggi = makin besar
-                # peluang" -- jadi HIJAU = tinggi/peluang besar, MERAH =
-                # rendah/peluang kecil, konsisten di semua metrik (user
-                # review 2026-08-09; sebelumnya arahnya kebalik).
-                color = "green" if frac > 0.66 else ("orange" if frac > 0.33 else "red")
+            category = classify_marker(
+                value,
+                data_quality=r["Data quality"],
+                spec=metric_spec,
+                boundaries=category_boundaries,
+            )
 
             popup_html = (
                 f"<b>{r['Hospital']}</b><br>"
                 f"Group: {r['Group']}<br>"
+                f"Metrik aktif: {metric_spec.label} = "
+                f"{value if pd.notna(value) else 'unknown'}<br>"
+                f"Kategori marker: {category.label}<br>"
                 f"Derm: {r['Derm'] if pd.notna(r['Derm']) else 'unknown'}<br>"
                 f"Derm hrs/wk: {r['Derm hrs/wk'] if pd.notna(r['Derm hrs/wk']) else 'unknown'}<br>"
                 f"Gap jam ramai: {r['Gap jam ramai'] if pd.notna(r['Gap jam ramai']) else 'unknown'}<br>"
@@ -440,7 +436,7 @@ with tab_map:
             folium.CircleMarker(
                 location=[r["lat"], r["lon"]],
                 radius=7,
-                color=color,
+                color=category.color,
                 fill=True,
                 fill_opacity=0.8,
                 popup=folium.Popup(popup_html, max_width=300),

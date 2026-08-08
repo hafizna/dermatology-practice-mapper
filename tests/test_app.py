@@ -17,6 +17,7 @@ from streamlit.testing.v1 import AppTest
 
 from src.config import DATA_DIR, REPO_ROOT
 from src.db import get_engine
+from src.map_categories import MAP_METRICS
 from src.models import Hospital
 from sqlalchemy.orm import Session
 
@@ -68,10 +69,32 @@ def test_app_map_metric_switch_renders_without_exception():
     at = AppTest.from_file(str(_APP_PATH), default_timeout=30)
     at.run()
     map_selectbox = next(sb for sb in at.selectbox if sb.label == "Metrik warna marker")
-    for option in map_selectbox.options:
-        map_selectbox.set_value(option)
+    for metric_key in MAP_METRICS:
+        map_selectbox.set_value(metric_key)
         at.run()
-        assert not at.exception, f"map metric {option!r} raised an exception"
+        assert not at.exception, f"map metric {metric_key!r} raised an exception"
+        map_selectbox = next(sb for sb in at.selectbox if sb.label == "Metrik warna marker")
+
+
+def test_app_map_legends_match_each_metric_direction():
+    at = AppTest.from_file(str(_APP_PATH), default_timeout=30)
+    at.run()
+    map_selectbox = next(sb for sb in at.selectbox if sb.label == "Metrik warna marker")
+
+    expected_directions = {
+        "Opportunity": "nilai lebih tinggi",
+        "Derm": "nilai lebih rendah",
+        "Derm hrs/wk": "nilai lebih rendah",
+        "prime_gap_ratio_display": "nilai lebih tinggi",
+    }
+    for metric_key, direction in expected_directions.items():
+        map_selectbox.set_value(metric_key)
+        at.run()
+        legends = [str(md.value) for md in at.markdown if "Tercile peta aktif" in str(md.value)]
+        assert len(legends) == 1
+        assert MAP_METRICS[metric_key].label in legends[0]
+        assert direction in legends[0]
+        map_selectbox = next(sb for sb in at.selectbox if sb.label == "Metrik warna marker")
 
 
 def test_app_heatmap_hospital_selection_renders_without_exception():
