@@ -392,7 +392,21 @@ def _parse_mitra_keluarga(entries: list[dict]) -> list[ParsedScheduleSlot]:
     # a recurring-pattern inference (spec: this is an inference from a
     # few weeks of concrete bookings, medium confidence at best — see
     # src/scrapers/mitra_keluarga.py docstring).
-    slots = []
+    #
+    # IMPORTANT: the source typically returns several weeks' worth of
+    # concrete future bookings for the SAME recurring weekly slot (e.g.
+    # every Tuesday 11:00-13:00 appears once per week for 4+ weeks) —
+    # confirmed in Fase 6 coverage-matrix testing: without deduplicating,
+    # a single 2-hour/week slot was counted 4x as 8 hours/week, wildly
+    # inflating doctor_hours_week (one real hospital showed 358
+    # hours/week for 6 doctors before this fix). Since this parser's
+    # whole purpose is inferring ONE recurring weekly pattern from
+    # multiple concrete dates, multiple raw entries collapsing to the
+    # same (day_of_week, start_time, end_time) are the SAME weekly slot,
+    # not separate sessions — deduplicated here, keeping the raw_text
+    # from the earliest occurrence (by source order) as representative.
+    slots: list[ParsedScheduleSlot] = []
+    seen: set[tuple[int | None, str | None, str | None]] = set()
     for e in entries:
         raw_day = e.get("day")
         day = normalize_day_of_week(raw_day, source="mitra_keluarga")
@@ -401,11 +415,22 @@ def _parse_mitra_keluarga(entries: list[dict]) -> list[ParsedScheduleSlot]:
         raw_text = f"{e.get('date')} {raw_day} {start}-{end}"
 
         if day is None:
+            # Unrecognized day names don't collapse against each other
+            # (day is None for all of them) — every such raw occurrence
+            # is kept visible as its own low-confidence entry rather
+            # than silently deduplicated away, since we can't confirm
+            # they're really the same recurring slot without knowing
+            # the day.
             slots.append(ParsedScheduleSlot(None, None, None, raw_text, "low"))
             continue
 
         start_hhmm = _hms_to_hhmm(start)
         end_hhmm = _hms_to_hhmm(end)
+        key = (day, start_hhmm, end_hhmm)
+        if key in seen:
+            continue
+        seen.add(key)
+
         # Medium, not high: inferred recurring pattern from a concrete
         # booking date, not a source-declared recurring rule.
         confidence = "medium" if (start_hhmm and end_hhmm) else "low"

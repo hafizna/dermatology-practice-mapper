@@ -257,6 +257,55 @@ def test_mitra_keluarga_dated_entries_are_medium_confidence():
     assert slots[0].parse_confidence == "medium"
 
 
+def test_mitra_keluarga_repeated_weekly_dates_deduplicate_to_one_slot():
+    # Regression guard for a real Fase 6 bug: the source returns several
+    # weeks' worth of concrete future bookings for the SAME recurring
+    # weekly slot (e.g. every Tuesday 11:00-13:00, appearing once per
+    # week for 4+ weeks) — without deduplication, doctor_hours_week was
+    # inflated 4x (one real hospital showed 358 hours/week for 6 doctors
+    # before this fix; should be a much smaller, plausible number).
+    entries = [
+        {"date": "2026-08-11", "day": "Selasa", "start_time": "11:00:00", "end_time": "13:00:00"},
+        {"date": "2026-08-18", "day": "Selasa", "start_time": "11:00:00", "end_time": "13:00:00"},
+        {"date": "2026-08-25", "day": "Selasa", "start_time": "11:00:00", "end_time": "13:00:00"},
+        {"date": "2026-09-01", "day": "Selasa", "start_time": "11:00:00", "end_time": "13:00:00"},
+    ]
+    slots = parse_schedule_entries(entries, source="mitra_keluarga")
+    assert len(slots) == 1
+    assert slots[0].day_of_week == 1  # Selasa
+    assert slots[0].start_time == "11:00"
+    assert slots[0].end_time == "13:00"
+
+
+def test_mitra_keluarga_different_slots_on_same_day_not_collapsed():
+    # A doctor with TWO distinct sessions on the same weekday (different
+    # times) must keep both — dedup is keyed on (day, start, end), not
+    # day alone.
+    entries = [
+        {"date": "2026-08-10", "day": "Senin", "start_time": "10:00:00", "end_time": "13:00:00"},
+        {"date": "2026-08-10", "day": "Senin", "start_time": "15:00:00", "end_time": "18:00:00"},
+        {"date": "2026-08-17", "day": "Senin", "start_time": "10:00:00", "end_time": "13:00:00"},
+        {"date": "2026-08-17", "day": "Senin", "start_time": "15:00:00", "end_time": "18:00:00"},
+    ]
+    slots = parse_schedule_entries(entries, source="mitra_keluarga")
+    assert len(slots) == 2
+    times = {(s.start_time, s.end_time) for s in slots}
+    assert times == {("10:00", "13:00"), ("15:00", "18:00")}
+
+
+def test_mitra_keluarga_different_doctors_at_same_hospital_not_cross_deduplicated():
+    # Dedup happens per parse_schedule_entries() CALL, which is always
+    # scoped to one doctor's own entries (per persist_doctor_record) — a
+    # sanity check that two calls for different doctors don't share
+    # dedup state across calls.
+    entries_doctor_a = [{"date": "2026-08-11", "day": "Selasa", "start_time": "11:00:00", "end_time": "13:00:00"}]
+    entries_doctor_b = [{"date": "2026-08-11", "day": "Selasa", "start_time": "11:00:00", "end_time": "13:00:00"}]
+    slots_a = parse_schedule_entries(entries_doctor_a, source="mitra_keluarga")
+    slots_b = parse_schedule_entries(entries_doctor_b, source="mitra_keluarga")
+    assert len(slots_a) == 1
+    assert len(slots_b) == 1
+
+
 def test_emc_numeric_day_2_is_selasa():
     # Self-verified 2026-08-08 by cross-referencing every doctor card's
     # day=N appointment link against the Indonesian day-name table header
