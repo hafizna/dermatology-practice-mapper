@@ -32,29 +32,16 @@ def test_lower_value_is_greener_for_supply_metrics(metric_key):
     assert classify_marker(9.0, data_quality="complete", spec=spec, boundaries=bounds).color == "red"
 
 
-def test_confirmed_zero_is_green_for_known_raw_supply_metrics():
-    for metric_key in ("Derm", "Derm hrs/wk"):
+def test_confirmed_zero_is_gray_and_excluded_for_every_metric():
+    for metric_key in MAP_METRICS:
         spec = MAP_METRICS[metric_key]
         bounds = CategoryBoundaries(0, 3, 6, 9)
         category = classify_marker(
             0.0, data_quality="confirmed_zero", spec=spec, boundaries=bounds
         )
-        assert category.color == "green"
-        assert metric_value_participates_in_scale(
-            0.0, data_quality="confirmed_zero", spec=spec
-        )
-
-
-def test_confirmed_zero_is_gray_and_excluded_for_score_and_gap():
-    for metric_key in ("Opportunity", "prime_gap_ratio_display"):
-        spec = MAP_METRICS[metric_key]
-        bounds = CategoryBoundaries(0, 1 / 3, 2 / 3, 1)
-        category = classify_marker(
-            1.0, data_quality="confirmed_zero", spec=spec, boundaries=bounds
-        )
         assert category.color == "gray"
         assert not metric_value_participates_in_scale(
-            1.0, data_quality="confirmed_zero", spec=spec
+            0.0, data_quality="confirmed_zero", spec=spec
         )
 
 
@@ -67,6 +54,37 @@ def test_missing_value_is_always_gray_and_outside_scale(missing):
         ).color == "gray"
         assert not metric_value_participates_in_scale(
             missing, data_quality="unknown", spec=spec
+        )
+
+
+def test_unknown_is_gray_and_excluded_even_if_a_stale_numeric_value_exists():
+    bounds = CategoryBoundaries(0, 1 / 3, 2 / 3, 1)
+    for spec in MAP_METRICS.values():
+        assert classify_marker(
+            0.5, data_quality="unknown", spec=spec, boundaries=bounds
+        ).color == "gray"
+        assert not metric_value_participates_in_scale(
+            0.5, data_quality="unknown", spec=spec
+        )
+
+
+def test_partial_is_colored_only_for_known_doctor_count():
+    bounds = CategoryBoundaries(0, 3, 6, 9)
+    count_spec = MAP_METRICS["Derm"]
+    assert classify_marker(
+        2, data_quality="partial", spec=count_spec, boundaries=bounds
+    ).color == "green"
+    assert metric_value_participates_in_scale(
+        2, data_quality="partial", spec=count_spec
+    )
+
+    for metric_key in ("Opportunity", "Derm hrs/wk", "prime_gap_ratio_display"):
+        spec = MAP_METRICS[metric_key]
+        assert classify_marker(
+            0, data_quality="partial", spec=spec, boundaries=bounds
+        ).color == "gray"
+        assert not metric_value_participates_in_scale(
+            0, data_quality="partial", spec=spec
         )
 
 

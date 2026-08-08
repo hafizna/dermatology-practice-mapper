@@ -54,7 +54,8 @@ python -m src.cli serve
 Lihat §7 `PROJECT_SPEC.md` untuk struktur folder yang diharapkan. Ringkasnya:
 
 - `config/` — semua threshold, bobot skor, prime-time window, preferred
-  hospital list; semuanya editable YAML, bukan hardcoded.
+  hospital list, alias/koreksi di `manual_overrides.csv`, dan fasilitas
+  terverifikasi yang belum ada di OSM pada `manual_hospitals.csv`.
 - `data/raw/`, `data/processed/` — **di-gitignore**; berisi data dokter yang
   tidak boleh masuk repo publik (spec §3.8).
 - `data/reference/` — data publik non-sensitif yang boleh di-commit (mis.

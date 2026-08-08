@@ -14,7 +14,9 @@ from src.registry.merge import (
     _load_duplicate_overrides,
     _load_preferred_group_overrides,
     _match_preferred_group,
+    _replace_manual_hospitals,
 )
+from src.registry.manual import load_manual_hospitals
 from src.registry.osm import OsmHospitalRecord
 
 
@@ -245,3 +247,38 @@ def test_apply_display_alias_overrides_skips_when_coordinate_does_not_match(in_m
 
         session.refresh(wrong_location)
         assert wrong_location.display_alias is None
+
+
+def test_manual_hospital_config_is_complete_and_coordinate_valid():
+    records = load_manual_hospitals()
+    assert len(records) == 15
+    assert {record.name for record in records} >= {
+        "EKA Hospital Depok",
+        "Mitra Keluarga Grand Wisata",
+        "Siloam Specialist Center Senayan",
+    }
+
+
+def test_replace_manual_hospitals_is_idempotent(in_memory_engine):
+    from sqlalchemy.orm import Session
+
+    from src.models import Hospital, SourceTier
+
+    preferred = [
+        "Brawijaya",
+        "Eka Hospital",
+        "Hermina",
+        "Mayapada",
+        "Mitra Keluarga",
+        "Primaya",
+        "Sari Asih",
+        "Siloam",
+    ]
+    with Session(in_memory_engine) as session:
+        assert _replace_manual_hospitals(session, preferred) == 15
+        assert _replace_manual_hospitals(session, preferred) == 15
+        rows = session.query(Hospital).filter(
+            Hospital.source_tier == SourceTier.TIER_3_MANUAL
+        ).all()
+        assert len(rows) == 15
+        assert all(row.is_preferred_group for row in rows)

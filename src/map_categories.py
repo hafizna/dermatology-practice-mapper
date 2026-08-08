@@ -19,6 +19,7 @@ class MapMetricSpec:
     dataframe_column: str
     higher_is_more_opportunity: bool
     gray_confirmed_zero: bool
+    allow_partial: bool
     decimals: int
 
 
@@ -39,16 +40,16 @@ class CategoryBoundaries:
 
 MAP_METRICS: dict[str, MapMetricSpec] = {
     "Opportunity": MapMetricSpec(
-        "Opportunity", "Skor opportunity", "Opportunity", True, True, 2
+        "Opportunity", "Skor opportunity", "Opportunity", True, True, False, 2
     ),
     "Derm": MapMetricSpec(
-        "Derm", "Jumlah dokter", "Derm", False, False, 0
+        "Derm", "Jumlah dokter", "Derm", False, True, True, 0
     ),
     "Derm hrs/wk": MapMetricSpec(
-        "Derm hrs/wk", "Jam dokter/minggu", "Derm hrs/wk", False, False, 1
+        "Derm hrs/wk", "Jam dokter/minggu", "Derm hrs/wk", False, True, False, 1
     ),
     "prime_gap_ratio_display": MapMetricSpec(
-        "prime_gap_ratio_display", "Gap jam ramai", "Gap jam ramai", True, True, 2
+        "prime_gap_ratio_display", "Gap jam ramai", "Gap jam ramai", True, True, False, 2
     ),
 }
 
@@ -71,7 +72,9 @@ def metric_value_participates_in_scale(
     """Whether a row should influence red/orange/green boundaries."""
     if _is_missing(value):
         return False
-    if data_quality == "confirmed_zero" and spec.gray_confirmed_zero:
+    if data_quality in {"unknown", "confirmed_zero"}:
+        return False
+    if data_quality == "partial" and not spec.allow_partial:
         return False
     return True
 
@@ -101,8 +104,12 @@ def classify_marker(
     """
     if _is_missing(value):
         return MarkerCategory("gray", "data tidak tersedia")
-    if data_quality == "confirmed_zero" and spec.gray_confirmed_zero:
+    if data_quality == "unknown":
+        return MarkerCategory("gray", "data tidak tersedia")
+    if data_quality == "confirmed_zero":
         return MarkerCategory("gray", "confirmed zero (kategori khusus)")
+    if data_quality == "partial" and not spec.allow_partial:
+        return MarkerCategory("gray", "data jadwal belum cukup")
     if boundaries.maximum <= boundaries.minimum:
         return MarkerCategory("orange", "peluang sedang (rentang tunggal)")
 

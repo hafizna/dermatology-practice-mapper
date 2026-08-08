@@ -36,6 +36,7 @@ from src.logging_setup import get_logger
 from src.models import DataStatus, Hospital, SourceTier
 from src.parsing.hospital_names import normalize_hospital_name
 from src.registry.kemkes import fetch_kemkes_hospitals
+from src.registry.manual import load_manual_hospitals
 from src.registry.osm import OsmHospitalRecord, fetch_osm_hospitals
 
 log = get_logger(__name__)
@@ -325,6 +326,52 @@ def _apply_display_alias_overrides(session) -> int:
     return applied
 
 
+def _replace_manual_hospitals(session, preferred_groups: list[str]) -> int:
+    """Replace the curated non-OSM facility rows idempotently.
+
+    These rows represent complete facilities missing from the current OSM
+    snapshot, not aliases for an existing row.  Deleting through the ORM (as
+    opposed to a bulk delete) preserves relationship cascades when a registry
+    rebuild is run after a previous doctor pipeline.
+    """
+    for existing in session.query(Hospital).filter(
+        Hospital.source_tier == SourceTier.TIER_3_MANUAL
+    ).all():
+        session.delete(existing)
+    session.flush()
+
+    records = load_manual_hospitals()
+    for rec in records:
+        is_preferred = rec.group in preferred_groups
+        session.add(
+            Hospital(
+                name=rec.name,
+                name_normalized=normalize_hospital_name(rec.name),
+                aliases_json="[]",
+                group=rec.group,
+                ownership=rec.ownership,
+                hospital_class=None,
+                hospital_type=rec.hospital_type,
+                address=rec.address,
+                kota_kab=rec.kota_kab,
+                lat=rec.lat,
+                lon=rec.lon,
+                geocode_source=rec.geocode_source,
+                geocode_confidence=rec.geocode_confidence,
+                website=rec.website,
+                source_url=rec.source_url,
+                source_tier=SourceTier.TIER_3_MANUAL,
+                scraped_at=rec.verified_at,
+                data_status=DataStatus.MANUAL,
+                is_preferred_group=is_preferred,
+                preferred_rank_group=rec.group if is_preferred else None,
+                has_dermatology_service=None,
+            )
+        )
+    session.flush()
+    return len(records)
+
+
 def run_registry_pipeline(source: str = "all") -> None:
     init_db()
     prefs = get_hospital_preferences()
@@ -348,6 +395,7 @@ def run_registry_pipeline(source: str = "all") -> None:
     n_private = 0
     n_public = 0
     n_ownership_unknown = 0
+    n_manual = 0
 
     with session_scope() as session:
         # Idempotent re-run: clear previously-loaded OSM-sourced rows so
@@ -414,11 +462,22 @@ def run_registry_pipeline(source: str = "all") -> None:
             )
             session.add(hospital)
 
+        n_manual = _replace_manual_hospitals(session, prefs.preferred_groups)
+        for rec in load_manual_hospitals():
+            n_with_coords += 1
+            n_preferred += int(rec.group in prefs.preferred_groups)
+            if rec.ownership == "swasta":
+                n_private += 1
+            elif rec.ownership == "pemerintah":
+                n_public += 1
+            else:
+                n_ownership_unknown += 1
+
         session.flush()  # populate .id for every newly-inserted Hospital before resolving overrides below
         n_duplicates_marked = _apply_duplicate_overrides(session)
         n_aliases_applied = _apply_display_alias_overrides(session)
 
-        total = len(deduped)
+        total = len(deduped) + n_manual
 
     # --- Deliverable report (spec §9 Fase 1) ---
     report_lines = [
@@ -433,10 +492,12 @@ def run_registry_pipeline(source: str = "all") -> None:
         f"Kandidat duplicate unresolved (skor {DEDUP_THRESHOLD - 15:.0f}-{DEDUP_THRESHOLD:.0f}, tidak di-auto-merge): {len(unresolved)}",
         f"Ditandai duplicate_of via manual override (config/manual_overrides.csv): {n_duplicates_marked}",
         f"Diberi display_alias via manual override (config/manual_overrides.csv): {n_aliases_applied}",
+        f"RS terverifikasi yang ditambahkan karena tidak ada di snapshot OSM: {n_manual}",
         "",
         "CATATAN PENTING:",
-        "- ownership='swasta' HANYA dari OSM tag operator:type, TIDAK LENGKAP.",
-        "  Sebagian besar RS swasta target (Eka, Siloam, dst.) kemungkinan besar",
+        "- Untuk row OSM, ownership='swasta' HANYA dari tag operator:type, TIDAK LENGKAP.",
+        "  Row manual terverifikasi dapat membawa ownership dari sumber resminya.",
+        "  Sebagian besar RS swasta target lain (Eka, Siloam, dst.) kemungkinan besar",
         "  masih 'unknown' sampai dikonfirmasi manual atau lewat scraping situs RS",
         "  langsung di Fase 2/3. Filter 'RS swasta' saat ini TIDAK BOLEH dipakai",
         "  sebagai daftar final -- gunakan is_preferred_group + config manual",

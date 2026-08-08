@@ -81,6 +81,38 @@ def test_extract_hermina_hospital_names_from_schedule_keys():
     assert set(names) == {"Hermina Depok", "Hermina Jatinegara"}
 
 
+def test_extract_hermina_falls_back_to_listing_hospitals_when_schedule_empty():
+    record = RawDoctorRecord(
+        raw_name="dr. Contoh, Sp.KK",
+        raw_credentials_text="dr. Contoh, Sp.KK",
+        raw_schedule_entries=[{}],
+        source_url="https://herminahospitals.com/id/doctors/contoh",
+        raw_payload={
+            "schedule": {},
+            "listing_entry": {
+                "attributes": {
+                    "practic_locations": ["Hermina Kemayoran"],
+                    "hospitals": [{"name": "Hermina Kemayoran"}],
+                }
+            },
+        },
+    )
+    assert extract_hospital_names(record, source="hermina") == ["Hermina Kemayoran"]
+
+
+def test_extract_primaya_uses_doctor_scoped_override_when_schedule_empty():
+    record = RawDoctorRecord(
+        raw_name="dr. Dia Febrina, Sp. KK",
+        raw_credentials_text="dr. Dia Febrina, Sp. KK",
+        raw_schedule_entries=[],
+        source_url="https://primayahospital.com/doctor/dr-dia-febrina-sp-kk/",
+        raw_payload={"card": {"location": "Bekasi"}},
+    )
+    assert extract_hospital_names(record, source="primaya") == [
+        "Primaya Hospital Bekasi Timur"
+    ]
+
+
 def test_extract_eka_splits_comma_joined_branches():
     record = RawDoctorRecord(
         raw_name="dr. Contoh",

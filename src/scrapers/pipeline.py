@@ -93,7 +93,23 @@ def _hospital_names_mitra_keluarga(record: RawDoctorRecord) -> list[str]:
 
 def _hospital_names_hermina(record: RawDoctorRecord) -> list[str]:
     schedule = record.raw_payload.get("schedule", {})
-    return [name for name in schedule.keys() if name]
+    names = [name for name in schedule.keys() if name]
+    if names:
+        return names
+
+    # Some doctors are present in the official speciality listing while
+    # the separate schedule endpoint returns an empty dict. The listing
+    # still carries structured practice locations, so use those exact
+    # official names rather than losing the hospital association.
+    attrs = record.raw_payload.get("listing_entry", {}).get("attributes", {})
+    hospital_names = [
+        hospital.get("name", "")
+        for hospital in attrs.get("hospitals", [])
+        if isinstance(hospital, dict) and hospital.get("name")
+    ]
+    if hospital_names:
+        return list(dict.fromkeys(hospital_names))
+    return list(dict.fromkeys(name for name in attrs.get("practic_locations", []) if name))
 
 
 def _hospital_names_emc(record: RawDoctorRecord) -> list[str]:
@@ -152,6 +168,12 @@ def _hospital_names_primaya(record: RawDoctorRecord) -> list[str]:
     if by_hospital:
         return list(by_hospital.keys())
 
+    # Doctor-scoped verified fallback for an empty schedule response. This
+    # is deliberately keyed by source URL: globally mapping a bare card
+    # location such as "Bekasi" would conflate several Primaya branches.
+    if record.source_url in _DOCTOR_HOSPITAL_OVERRIDES:
+        return [_DOCTOR_HOSPITAL_OVERRIDES[record.source_url]]
+
     # Fallback: no schedule HTML at all (confirmed real case — some
     # Primaya doctors' schedule_html is empty). Bare city name is all
     # that's left; keep it rather than dropping the record, since
@@ -160,6 +182,19 @@ def _hospital_names_primaya(record: RawDoctorRecord) -> list[str]:
     card = record.raw_payload.get("card", {})
     location = card.get("location", "")
     return [location] if location else []
+
+
+def _load_doctor_hospital_overrides() -> dict[str, str]:
+    from src.scrapers.manual import load_manual_overrides
+
+    return {
+        override.entity_key: override.override_value
+        for override in load_manual_overrides()
+        if override.entity_type == "doctor" and override.field == "hospital_name"
+    }
+
+
+_DOCTOR_HOSPITAL_OVERRIDES = _load_doctor_hospital_overrides()
 
 
 def _hospital_names_eka(record: RawDoctorRecord) -> list[str]:
