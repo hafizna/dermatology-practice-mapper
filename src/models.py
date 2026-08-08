@@ -156,6 +156,19 @@ class Hospital(Base):
         ForeignKey("hospitals.id"), nullable=True
     )
 
+    # Manual override (config/manual_overrides.csv, field="display_alias")
+    # for the common/brand name a hospital is actually known by, when
+    # OSM's `name` tag is too generic to be recognizable on its own
+    # (e.g. OSM has "Rumah Sakit Siloam" for what is actually MRCCC
+    # Siloam Semanggi — a real, distinct institution, not a duplicate,
+    # just tagged in OSM without its full name). Shown ALONGSIDE `name`
+    # in the dashboard (never replaces it — `name` stays the untouched
+    # raw OSM provenance, per this project's "never overwrite source
+    # data" rule), purely so a human recognizes the hospital at a
+    # glance. NULL for the vast majority of hospitals whose OSM name is
+    # already recognizable.
+    display_alias: Mapped[str | None] = mapped_column(String, nullable=True)
+
     # Dermatology service existence — kept independent from doctor count so
     # n_dermatologists_unique == 0 can be disambiguated (spec §7.6).
     has_dermatology_service: Mapped[bool | None] = mapped_column(Boolean, nullable=True)

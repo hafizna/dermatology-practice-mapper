@@ -277,6 +277,54 @@ def _apply_duplicate_overrides(session) -> int:
     return applied
 
 
+def _load_display_alias_overrides() -> list[tuple[str, float, float, str]]:
+    """Manual overrides (config/manual_overrides.csv, field=
+    "display_alias") for Hospital.display_alias — see that column's
+    docstring in src/models.py. entity_key shape is "name|lat|lon" (same
+    coordinate-qualified convention as duplicate_of, needed for the same
+    reason: OSM can have more than one Hospital row sharing a name
+    string), override_value is the plain alias text to show.
+    """
+    from src.scrapers.manual import load_manual_overrides
+
+    entries = []
+    for o in load_manual_overrides():
+        if o.entity_type != "hospital" or o.field != "display_alias":
+            continue
+        try:
+            name, lat, lon = o.entity_key.split("|")
+            entries.append((name, float(lat), float(lon), o.override_value))
+        except ValueError:
+            log.warning("display_alias_override_malformed", entity_key=o.entity_key)
+    return entries
+
+
+def _apply_display_alias_overrides(session) -> int:
+    """Resolve _load_display_alias_overrides() entries to Hospital rows
+    (matched by name AND coordinate, same tolerance/logic as
+    _apply_duplicate_overrides) and set display_alias. Returns the count
+    successfully applied.
+    """
+    _COORD_TOLERANCE = 0.0005
+
+    applied = 0
+    for name, lat, lon, alias in _load_display_alias_overrides():
+        candidates = session.query(Hospital).filter(Hospital.name == name).all()
+        match = None
+        for c in candidates:
+            if c.lat is None or c.lon is None:
+                continue
+            if abs(c.lat - lat) < _COORD_TOLERANCE and abs(c.lon - lon) < _COORD_TOLERANCE:
+                match = c
+                break
+        if match is None:
+            log.warning("display_alias_override_unresolved", name=name, lat=lat, lon=lon, alias=alias)
+            continue
+        match.display_alias = alias
+        applied += 1
+    return applied
+
+
 def run_registry_pipeline(source: str = "all") -> None:
     init_db()
     prefs = get_hospital_preferences()
@@ -368,6 +416,7 @@ def run_registry_pipeline(source: str = "all") -> None:
 
         session.flush()  # populate .id for every newly-inserted Hospital before resolving overrides below
         n_duplicates_marked = _apply_duplicate_overrides(session)
+        n_aliases_applied = _apply_display_alias_overrides(session)
 
         total = len(deduped)
 
@@ -383,6 +432,7 @@ def run_registry_pipeline(source: str = "all") -> None:
         f"Tanpa koordinat: {total - n_with_coords} / {total}",
         f"Kandidat duplicate unresolved (skor {DEDUP_THRESHOLD - 15:.0f}-{DEDUP_THRESHOLD:.0f}, tidak di-auto-merge): {len(unresolved)}",
         f"Ditandai duplicate_of via manual override (config/manual_overrides.csv): {n_duplicates_marked}",
+        f"Diberi display_alias via manual override (config/manual_overrides.csv): {n_aliases_applied}",
         "",
         "CATATAN PENTING:",
         "- ownership='swasta' HANYA dari OSM tag operator:type, TIDAK LENGKAP.",

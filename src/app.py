@@ -77,7 +77,16 @@ def _load_dashboard_dataframe(universe: str) -> pd.DataFrame:
             records.append(
                 {
                     "hospital_id": hospital.id,
-                    "Hospital": hospital.name,
+                    # display_alias (config/manual_overrides.csv) is
+                    # shown ALONGSIDE the raw OSM name, never replacing
+                    # it — e.g. OSM's "Rumah Sakit Siloam" really is
+                    # MRCCC Siloam Semanggi, but that alias is a human
+                    # annotation, not the source-of-record name.
+                    "Hospital": (
+                        f"{hospital.name} (a.k.a. {hospital.display_alias})"
+                        if hospital.display_alias
+                        else hospital.name
+                    ),
                     "Group": hospital.preferred_rank_group or "(bukan target group)",
                     "is_preferred_group": hospital.is_preferred_group,
                     "ownership": hospital.ownership,
@@ -118,15 +127,25 @@ def _load_dashboard_dataframe(universe: str) -> pd.DataFrame:
 
 
 def _data_quality_label(row: pd.Series) -> str:
-    # spec §8.2 "Data quality" column: complete/partial/unknown, derived
-    # from BOTH the hospital-level data_status and whether a usable
-    # opportunity score was actually computed — a hospital can have
-    # data_status=partial but still be score_status=ok (schedule
-    # completeness cleared the bar), so this maps the more informative
-    # of the two rather than showing either alone.
+    # spec §8.2 "Data quality" column: complete/partial/unknown.
+    #
+    # confirmed_zero gets its own branch, checked FIRST and separately
+    # from score_status=="ok" — a bug caught via dashboard review
+    # 2026-08-09: confirmed_zero hospitals ARE score_status=="ok" (Fase
+    # 7 treats "confirmed zero doctors" as complete information, not
+    # missing data — see src/scoring/core.py's eligibility gate), but
+    # they have NO schedule data to be "complete" about (there's no
+    # doctor to have a schedule). Labeling them "complete" the same way
+    # as a hospital with actually-parsed doctor schedules is misleading
+    # — a confirmed_zero hospital's opportunity_score is a certainty
+    # rather than an estimate, which "complete" doesn't quite capture
+    # either, so it gets a distinct label instead of borrowing either
+    # existing bucket's meaning.
+    if row["derm_status"] == "confirmed_zero":
+        return "confirmed_zero"
     if row["score_status"] == "ok":
         return "complete"
-    if row["derm_status"] in ("has_doctors", "confirmed_zero"):
+    if row["derm_status"] == "has_doctors":
         return "partial"
     return "unknown"
 
@@ -186,7 +205,7 @@ selected_groups = st.sidebar.multiselect("Hospital group", options=group_options
 
 min_derm = st.sidebar.number_input("Jumlah dokter minimum", min_value=0, value=0, step=1)
 
-quality_options = ["complete", "partial", "unknown"]
+quality_options = ["complete", "confirmed_zero", "partial", "unknown"]
 selected_quality = st.sidebar.multiselect("Data status", options=quality_options, default=[])
 
 min_completeness = st.sidebar.slider("Minimum schedule completeness", 0.0, 1.0, 0.0, 0.05)
@@ -363,7 +382,10 @@ with tab_map:
     )
     st.caption(
         "Ukuran/warna marker TIDAK berdasarkan populasi atau demand proxy apa pun — "
-        "murni metrik supply internal RS (spec §10 Fase 8.4, sebelum V2)."
+        "murni metrik supply internal RS (spec §10 Fase 8.4, sebelum V2). "
+        "🟢 Hijau = peluang besar · 🟠 Oranye = sedang · 🔴 Merah = peluang kecil · "
+        "⚪ Abu-abu = confirmed_zero (skor pasti karena nol dokter terkonfirmasi, "
+        "bukan hasil hitung dari data jadwal) atau data tidak tersedia."
     )
 
     map_df = filtered.dropna(subset=["lat", "lon"]).copy()
@@ -389,11 +411,22 @@ with tab_map:
 
         for _, r in map_df.iterrows():
             value = r["metric_value"]
-            if pd.isna(value):
+            # RS confirmed_zero (nol dokter TERKONFIRMASI) selalu dapat
+            # opportunity_score=1.0 by design (skor pasti/maksimal by
+            # aturan, bukan hasil kalkulasi dari data jadwal riil seperti
+            # RS lain) -- diberi abu-abu terpisah supaya tidak tercampur
+            # visual dengan RS yang skornya tinggi karena data jadwal
+            # sungguhan menunjukkan banyak gap (user review 2026-08-09).
+            if r["Data quality"] == "confirmed_zero" or pd.isna(value):
                 color = "gray"
             else:
                 frac = (value - v_min) / (v_max - v_min) if v_max > v_min else 0.5
-                color = "red" if frac > 0.66 else ("orange" if frac > 0.33 else "green")
+                # Semua metrik peta (Opportunity, Derm, Derm hrs/wk, Gap
+                # jam ramai) bermakna "makin tinggi = makin besar
+                # peluang" -- jadi HIJAU = tinggi/peluang besar, MERAH =
+                # rendah/peluang kecil, konsisten di semua metrik (user
+                # review 2026-08-09; sebelumnya arahnya kebalik).
+                color = "green" if frac > 0.66 else ("orange" if frac > 0.33 else "red")
 
             popup_html = (
                 f"<b>{r['Hospital']}</b><br>"

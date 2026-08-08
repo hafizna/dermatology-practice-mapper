@@ -297,8 +297,15 @@ def test_doctors_with_no_schedule_data_at_all_are_has_doctors_not_confirmed_zero
     metrics = db_session.get(HospitalPracticeMetrics, h.id)
     assert metrics.dermatologist_count_status == DermatologistCountStatus.HAS_DOCTORS
     assert metrics.n_dermatologists_unique == 2
-    assert metrics.n_sessions_week is None
-    assert metrics.doctor_hours_week is None
+    # 0, not None: we KNOW the count is 2 confirmed doctors with 0
+    # scheduled sessions (a real, meaningful value for a HAS_DOCTORS
+    # hospital) — not "unknown how many sessions" (bug fix 2026-08-09,
+    # caught via dashboard review: `x or None` was silently turning
+    # every confirmed 0 into None across n_dermatologists_unique/
+    # n_sessions_week/doctor_hours_week for HAS_DOCTORS and
+    # CONFIRMED_ZERO hospitals alike).
+    assert metrics.n_sessions_week == 0
+    assert metrics.doctor_hours_week == 0.0
 
 
 def test_hospital_in_scraped_group_with_zero_doctors_is_confirmed_zero(db_session, monkeypatch):
@@ -317,6 +324,15 @@ def test_hospital_in_scraped_group_with_zero_doctors_is_confirmed_zero(db_sessio
 
     metrics = db_session.get(HospitalPracticeMetrics, h_zero.id)
     assert metrics.dermatologist_count_status == DermatologistCountStatus.CONFIRMED_ZERO
+    # Regression guard (dashboard review 2026-08-09): confirmed_zero
+    # hospitals must show n_dermatologists_unique=0 (a CONFIRMED,
+    # meaningful value), never None — `x or None` was silently
+    # collapsing every confirmed 0 into None here, which made the
+    # dashboard's "Data quality" column wrongly read confirmed_zero
+    # hospitals as "score computed from an unknown doctor count".
+    assert metrics.n_dermatologists_unique == 0
+    assert metrics.n_sessions_week == 0
+    assert metrics.doctor_hours_week == 0.0
 
 
 def test_hospital_never_scraped_with_zero_doctors_is_unknown(db_session, monkeypatch):
@@ -328,6 +344,9 @@ def test_hospital_never_scraped_with_zero_doctors_is_unknown(db_session, monkeyp
 
     metrics = db_session.get(HospitalPracticeMetrics, h.id)
     assert metrics.dermatologist_count_status == DermatologistCountStatus.UNKNOWN
+    # Unlike CONFIRMED_ZERO/HAS_DOCTORS, an UNKNOWN hospital genuinely
+    # has no known doctor count — None (not 0) is correct here.
+    assert metrics.n_dermatologists_unique is None
 
 
 def test_every_hospital_gets_a_metrics_row_even_with_no_data(db_session, monkeypatch):

@@ -402,12 +402,22 @@ def build_coverage_matrix() -> dict:
             existing = session.get(HospitalPracticeMetrics, hospital.id)
             row = existing or HospitalPracticeMetrics(hospital_id=hospital.id)
 
+            # NOTE: `x or None` is WRONG here for CONFIRMED_ZERO/HAS_DOCTORS
+            # hospitals — 0 is a CONFIRMED, meaningful value for those two
+            # statuses (real bug, caught via dashboard review 2026-08-09:
+            # every confirmed_zero hospital showed n_dermatologists_unique
+            # =None, which the dashboard's "Data quality" logic then read
+            # as "score computed from unknown doctor count" — a
+            # contradiction, since confirmed_zero literally means we ARE
+            # certain the count is zero). Only UNKNOWN hospitals (never
+            # scraped at all) should show None/"tidak diketahui" here.
+            known_status = derm_status in (DermatologistCountStatus.HAS_DOCTORS, DermatologistCountStatus.CONFIRMED_ZERO)
             row.dermatologist_count_status = derm_status
-            row.n_dermatologists_unique = supply.n_dermatologists_unique or None
-            row.n_sessions_week = supply.n_sessions_week or None
-            row.doctor_hours_week = supply.doctor_hours_week or None
-            row.prime_time_doctor_hours = supply.prime_time_doctor_hours or None
-            row.weekend_doctor_hours = supply.weekend_doctor_hours or None
+            row.n_dermatologists_unique = supply.n_dermatologists_unique if known_status else None
+            row.n_sessions_week = supply.n_sessions_week if known_status else None
+            row.doctor_hours_week = supply.doctor_hours_week if known_status else None
+            row.prime_time_doctor_hours = supply.prime_time_doctor_hours if known_status else None
+            row.weekend_doctor_hours = supply.weekend_doctor_hours if known_status else None
             row.coverage_ratio_all = supply.coverage_ratio_all
             row.coverage_ratio_prime = supply.coverage_ratio_prime
             row.coverage_ratio_weekend = supply.coverage_ratio_weekend

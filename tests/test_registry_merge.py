@@ -6,9 +6,11 @@ from __future__ import annotations
 import datetime as dt
 
 from src.registry.merge import (
+    _apply_display_alias_overrides,
     _apply_duplicate_overrides,
     _dedup_osm_records,
     _infer_ownership,
+    _load_display_alias_overrides,
     _load_duplicate_overrides,
     _load_preferred_group_overrides,
     _match_preferred_group,
@@ -161,7 +163,6 @@ def test_apply_duplicate_overrides_sets_duplicate_of_hospital_id(in_memory_engin
         applied = _apply_duplicate_overrides(session)
 
         assert applied >= 1
-        session.refresh(dup)
         assert dup.duplicate_of_hospital_id == target.id
 
 
@@ -190,3 +191,58 @@ def test_apply_duplicate_overrides_skips_when_coordinate_does_not_match(in_memor
 
         session.refresh(wrong_location)
         assert wrong_location.duplicate_of_hospital_id is None
+
+
+def test_load_display_alias_overrides_reads_real_csv():
+    # Regression guard for the dashboard-review investigation (2026-08-09):
+    # OSM tags this hospital only as the generic brand name "Rumah Sakit
+    # Siloam" (no "MRCCC"/"Semanggi" substring at all) -- display_alias
+    # is the sanctioned way to show its recognizable name in the
+    # dashboard without touching Hospital.name (raw source data).
+    entries = _load_display_alias_overrides()
+    names = {(e[0], e[3]) for e in entries}
+    assert ("Rumah Sakit Siloam", "MRCCC Siloam Semanggi") in names
+
+
+def test_apply_display_alias_overrides_sets_display_alias(in_memory_engine):
+    from sqlalchemy.orm import Session
+
+    from src.models import Hospital
+
+    with Session(in_memory_engine) as session:
+        h = Hospital(
+            name="Rumah Sakit Siloam",
+            name_normalized="siloam",
+            aliases_json="[]",
+            lat=-6.21909,
+            lon=106.8171913,
+        )
+        session.add(h)
+        session.flush()
+
+        applied = _apply_display_alias_overrides(session)
+
+        assert applied >= 1
+        assert h.display_alias == "MRCCC Siloam Semanggi"
+
+
+def test_apply_display_alias_overrides_skips_when_coordinate_does_not_match(in_memory_engine):
+    from sqlalchemy.orm import Session
+
+    from src.models import Hospital
+
+    with Session(in_memory_engine) as session:
+        wrong_location = Hospital(
+            name="Rumah Sakit Siloam",
+            name_normalized="siloam",
+            aliases_json="[]",
+            lat=-7.0,
+            lon=108.0,
+        )
+        session.add(wrong_location)
+        session.flush()
+
+        _apply_display_alias_overrides(session)
+
+        session.refresh(wrong_location)
+        assert wrong_location.display_alias is None
