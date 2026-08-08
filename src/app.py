@@ -29,7 +29,6 @@ from src.metrics.coverage import (
     DAY_START_MINUTES,
     N_DAYS,
     N_SLOTS_PER_DAY,
-    SLOT_MINUTES,
     build_matrix_cells,
     usable_slots_for_hospital,
 )
@@ -58,13 +57,19 @@ def _load_dashboard_dataframe(universe: str) -> pd.DataFrame:
     """One row per Hospital with its latest HospitalPracticeMetrics
     (left join — a hospital with no Fase 6/7 row yet still appears, with
     every metric column as None/NaN, per spec's "unknown != zero").
+
+    Rows manually confirmed as a duplicate of another Hospital (see
+    Hospital.duplicate_of_hospital_id docstring) are excluded entirely —
+    the same exclusion applied in src/scoring/core.py's _universe_query,
+    kept consistent here since the dashboard reads Hospital directly
+    rather than going through that function.
     """
     engine = _get_engine()
     with Session(engine) as session:
         rows = session.execute(
-            select(Hospital, HospitalPracticeMetrics).join(
-                HospitalPracticeMetrics, HospitalPracticeMetrics.hospital_id == Hospital.id, isouter=True
-            )
+            select(Hospital, HospitalPracticeMetrics)
+            .join(HospitalPracticeMetrics, HospitalPracticeMetrics.hospital_id == Hospital.id, isouter=True)
+            .where(Hospital.duplicate_of_hospital_id.is_(None))
         ).all()
 
         records = []
@@ -275,32 +280,40 @@ with tab_heatmap:
             n_low_confidence = sum(1 for s in all_slots if s.parse_confidence == ParseConfidence.LOW)
             cells = build_matrix_cells(usable)
 
-            # Build a N_DAYS x N_SLOTS_PER_DAY grid: 0=kosong, 1=1 dokter,
-            # 2=2+ dokter. Slots excluded for low confidence are NOT
-            # distinguishable per-cell from "genuinely empty" in this
-            # grid (the underlying data doesn't carry per-cell
-            # provenance at that granularity) — the aggregate low-
-            # confidence count is surfaced as a caption instead, so
-            # "unknown" is visible at the hospital level even though the
-            # spec's cell-level unknown/empty distinction collapses here
-            # given what's actually derivable from parse_confidence.
+            # Tampilan per-JAM (gabung 2 slot 30 menit jadi 1 kolom) supaya
+            # tabel tidak perlu di-scroll horizontal — data mentah di balik
+            # layar tetap per 30 menit (dipakai untuk metrik Fase 6 seperti
+            # prime_gap_ratio/longest_prime_gap_minutes yang butuh presisi
+            # itu); ini murni pengelompokan untuk tampilan. Nilai tiap jam
+            # diambil dari jumlah dokter TERBANYAK di antara 2 slot 30-menit
+            # penyusunnya (bukan dijumlah), supaya angka tetap berarti
+            # "berapa dokter praktik saat itu", bukan hasil penjumlahan.
+            # 0=kosong, 1=1 dokter, 2=2+ dokter. Slot yang dikecualikan
+            # karena low confidence TIDAK bisa dibedakan per-sel dari
+            # "memang kosong" di grid ini (datanya tidak menyimpan info
+            # sedetail itu per sel) — jumlah slot low-confidence
+            # ditampilkan terpisah sebagai peringatan di bawah tabel.
+            N_HOURS = N_SLOTS_PER_DAY // 2  # 07:00-21:00 dalam 2 slot 30 menit per jam = 14 jam
             grid = []
             for day in range(N_DAYS):
                 row_vals = []
-                for idx in range(N_SLOTS_PER_DAY):
-                    n_doctors = len(cells.get((day, idx), set()))
+                for hour_idx in range(N_HOURS):
+                    slot_a = len(cells.get((day, hour_idx * 2), set()))
+                    slot_b = len(cells.get((day, hour_idx * 2 + 1), set()))
+                    n_doctors = max(slot_a, slot_b)
                     row_vals.append(min(n_doctors, 2))  # cap display at "2+"
                 grid.append(row_vals)
 
             time_labels = [
-                f"{(DAY_START_MINUTES + i * SLOT_MINUTES) // 60:02d}:{(DAY_START_MINUTES + i * SLOT_MINUTES) % 60:02d}"
-                for i in range(N_SLOTS_PER_DAY)
+                f"{(DAY_START_MINUTES + i * 60) // 60:02d}:00"
+                for i in range(N_HOURS)
             ]
             heatmap_df = pd.DataFrame(grid, index=_DAY_NAMES_ID, columns=time_labels)
 
             st.caption(
-                "0 = kosong · 1 = 1 dokter · 2 = 2+ dokter. Ditampilkan hanya slot dengan "
-                "day/time yang berhasil di-parse dengan confidence tinggi/medium."
+                "0 = kosong · 1 = 1 dokter · 2 = 2+ dokter. Kolom per jam (07:00-21:00), "
+                "diambil dari jumlah dokter terbanyak dalam jam tersebut. Ditampilkan hanya "
+                "jadwal yang berhasil di-parse dengan confidence tinggi/medium."
             )
             # Manual 3-color scale (0/1/2+) rather than
             # Styler.background_gradient — that needs matplotlib, an

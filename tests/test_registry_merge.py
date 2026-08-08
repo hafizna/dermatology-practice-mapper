@@ -6,8 +6,10 @@ from __future__ import annotations
 import datetime as dt
 
 from src.registry.merge import (
+    _apply_duplicate_overrides,
     _dedup_osm_records,
     _infer_ownership,
+    _load_duplicate_overrides,
     _load_preferred_group_overrides,
     _match_preferred_group,
 )
@@ -116,3 +118,75 @@ def test_load_preferred_group_overrides_reads_real_csv():
     assert overrides.get("pondok indah") == "RS Pondok Indah"
     assert overrides.get("puri indah pondok indah") == "RS Pondok Indah"
     assert "grha kedoya" not in overrides
+
+
+def test_load_duplicate_overrides_reads_real_csv():
+    # Regression guard for the dashboard-review investigation (2026-08-08):
+    # OSM has several brand-only-named entries ("Siloam Hospital", no
+    # branch identifier) sitting a few dozen meters from a fully-named
+    # branch ("Siloam Hospital Lippo Village") that already has scraped
+    # dermatologist data — Fase 1's name-similarity-first dedup doesn't
+    # catch these because the name strings are too different, so a
+    # manual duplicate_of override (Tier-3, config/manual_overrides.csv)
+    # is the sanctioned fix.
+    pairs = _load_duplicate_overrides()
+    names = {(p[0], p[3]) for p in pairs}
+    assert ("Siloam Hospital", "Siloam Hospital Lippo Village") in names
+    assert ("Rumah Sakit Pondok Indah", "RSU PURI INDAH PONDOK INDAH") in names
+
+
+def test_apply_duplicate_overrides_sets_duplicate_of_hospital_id(in_memory_engine):
+    from sqlalchemy.orm import Session
+
+    from src.models import Hospital
+
+    with Session(in_memory_engine) as session:
+        dup = Hospital(
+            name="Siloam Hospital",
+            name_normalized="siloam hospital",
+            aliases_json="[]",
+            lat=-6.2250421,
+            lon=106.5979602,
+        )
+        target = Hospital(
+            name="Siloam Hospital Lippo Village",
+            name_normalized="siloam hospital lippo village",
+            aliases_json="[]",
+            lat=-6.2251927,
+            lon=106.5985479,
+        )
+        session.add_all([dup, target])
+        session.flush()
+
+        applied = _apply_duplicate_overrides(session)
+
+        assert applied >= 1
+        session.refresh(dup)
+        assert dup.duplicate_of_hospital_id == target.id
+
+
+def test_apply_duplicate_overrides_skips_when_coordinate_does_not_match(in_memory_engine):
+    # A Hospital row with the right NAME but a coordinate far outside
+    # tolerance must NOT be marked duplicate — matching by name alone
+    # would risk merging two genuinely different institutions that
+    # happen to share a generic name (confirmed real case: two different
+    # "Rumah Sakit Siloam" rows ~6.7km apart in the actual registry).
+    from sqlalchemy.orm import Session
+
+    from src.models import Hospital
+
+    with Session(in_memory_engine) as session:
+        wrong_location = Hospital(
+            name="Siloam Hospital",
+            name_normalized="siloam hospital",
+            aliases_json="[]",
+            lat=-7.0,  # far from the overridden coordinate
+            lon=108.0,
+        )
+        session.add(wrong_location)
+        session.flush()
+
+        _apply_duplicate_overrides(session)
+
+        session.refresh(wrong_location)
+        assert wrong_location.duplicate_of_hospital_id is None

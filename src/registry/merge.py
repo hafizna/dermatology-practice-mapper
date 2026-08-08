@@ -206,6 +206,77 @@ def _load_preferred_group_overrides() -> dict[str, str]:
     return overrides
 
 
+def _load_duplicate_overrides() -> list[tuple[str, float, float, str, float, float]]:
+    """Manual dedup markers (config/manual_overrides.csv, field=
+    "duplicate_of") — see Hospital.duplicate_of_hospital_id's docstring
+    for why this exists (OSM entries named only after a brand, sitting
+    a few dozen meters from a fully-named branch, that survive Fase 1's
+    name-similarity-first automated dedup).
+
+    Keyed by (name, lat, lon) rather than name/name_normalized alone —
+    confirmed during this investigation that TWO different real
+    hospitals can share the exact string "Rumah Sakit Siloam" in OSM
+    (different branches, ~6.7km apart), so name alone cannot
+    disambiguate which physical row a human-reviewed pair refers to.
+    entity_key/override_value are "name|lat|lon" pipe-joined strings.
+
+    Returns a list of (dup_name, dup_lat, dup_lon, target_name,
+    target_lat, target_lon) tuples for the caller to resolve into
+    Hospital.id values after insert (IDs aren't known until then).
+    """
+    from src.scrapers.manual import load_manual_overrides
+
+    pairs = []
+    for o in load_manual_overrides():
+        if o.entity_type != "hospital" or o.field != "duplicate_of":
+            continue
+        try:
+            dup_name, dup_lat, dup_lon = o.entity_key.split("|")
+            target_name, target_lat, target_lon = o.override_value.split("|")
+            pairs.append(
+                (dup_name, float(dup_lat), float(dup_lon), target_name, float(target_lat), float(target_lon))
+            )
+        except ValueError:
+            log.warning("duplicate_override_malformed", entity_key=o.entity_key, override_value=o.override_value)
+    return pairs
+
+
+def _apply_duplicate_overrides(session) -> int:
+    """Resolve _load_duplicate_overrides() pairs to Hospital.id values
+    (matched by name AND coordinate, within a small tolerance for float
+    round-tripping) and set duplicate_of_hospital_id. Returns the count
+    successfully applied. A pair that doesn't resolve to an exact match
+    on both sides is skipped with a warning, never guessed.
+    """
+    _COORD_TOLERANCE = 0.0005  # ~50m, enough for float round-trip slop, tight enough to avoid ambiguity
+
+    def _find(name: str, lat: float, lon: float) -> Hospital | None:
+        candidates = session.query(Hospital).filter(Hospital.name == name).all()
+        for c in candidates:
+            if c.lat is None or c.lon is None:
+                continue
+            if abs(c.lat - lat) < _COORD_TOLERANCE and abs(c.lon - lon) < _COORD_TOLERANCE:
+                return c
+        return None
+
+    applied = 0
+    for dup_name, dup_lat, dup_lon, target_name, target_lat, target_lon in _load_duplicate_overrides():
+        dup = _find(dup_name, dup_lat, dup_lon)
+        target = _find(target_name, target_lat, target_lon)
+        if dup is None or target is None:
+            log.warning(
+                "duplicate_override_unresolved",
+                dup_name=dup_name,
+                dup_found=dup is not None,
+                target_name=target_name,
+                target_found=target is not None,
+            )
+            continue
+        dup.duplicate_of_hospital_id = target.id
+        applied += 1
+    return applied
+
+
 def run_registry_pipeline(source: str = "all") -> None:
     init_db()
     prefs = get_hospital_preferences()
@@ -295,6 +366,9 @@ def run_registry_pipeline(source: str = "all") -> None:
             )
             session.add(hospital)
 
+        session.flush()  # populate .id for every newly-inserted Hospital before resolving overrides below
+        n_duplicates_marked = _apply_duplicate_overrides(session)
+
         total = len(deduped)
 
     # --- Deliverable report (spec §9 Fase 1) ---
@@ -308,6 +382,7 @@ def run_registry_pipeline(source: str = "all") -> None:
         f"Dengan koordinat: {n_with_coords} / {total}",
         f"Tanpa koordinat: {total - n_with_coords} / {total}",
         f"Kandidat duplicate unresolved (skor {DEDUP_THRESHOLD - 15:.0f}-{DEDUP_THRESHOLD:.0f}, tidak di-auto-merge): {len(unresolved)}",
+        f"Ditandai duplicate_of via manual override (config/manual_overrides.csv): {n_duplicates_marked}",
         "",
         "CATATAN PENTING:",
         "- ownership='swasta' HANYA dari OSM tag operator:type, TIDAK LENGKAP.",

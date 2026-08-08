@@ -175,6 +175,39 @@ def test_match_uses_real_alias_override_for_swapped_word_order_pair(db_session):
     assert result.id == hospital.id
 
 
+def test_match_uses_coordinate_qualified_alias_when_name_is_ambiguous(db_session):
+    # Real case: OSM has TWO different hospitals both named "Rumah Sakit
+    # Siloam" (MRCCC Siloam Semanggi at Jalan Karet Pasar, and an
+    # unrelated Siloam Kebon Jeruk duplicate ~7km away). A bare-name
+    # hospital_name_alias override can't say which one "MRCCC Siloam
+    # Hospitals Semanggi" (the scraper-reported name) refers to — this
+    # needs the coordinate-qualified "name|lat|lon" override form.
+    from src.parsing.hospital_names import normalize_hospital_name
+
+    right_one = Hospital(
+        name="Rumah Sakit Siloam",
+        name_normalized=normalize_hospital_name("Rumah Sakit Siloam"),
+        aliases_json="[]",
+        preferred_rank_group="Siloam",
+        lat=-6.21909,
+        lon=106.8171913,
+    )
+    wrong_one = Hospital(
+        name="Rumah Sakit Siloam",
+        name_normalized=normalize_hospital_name("Rumah Sakit Siloam"),
+        aliases_json="[]",
+        preferred_rank_group="Siloam",
+        lat=-6.1911419,
+        lon=106.7638204,
+    )
+    db_session.add_all([right_one, wrong_one])
+    db_session.flush()
+
+    result = match_hospital_by_name(db_session, "MRCCC Siloam Hospitals Semanggi", preferred_group="Siloam")
+    assert result is not None
+    assert result.id == right_one.id
+
+
 # --- persist_doctor_record: credential gate -------------------------------
 
 

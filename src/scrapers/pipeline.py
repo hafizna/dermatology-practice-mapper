@@ -220,18 +220,66 @@ def _load_hospital_name_alias_overrides() -> dict[str, str]:
     Keyed by entity_type="hospital", field="hospital_name_alias" rows in
     config/manual_overrides.csv, entity_key = the scraper-reported raw
     name, override_value = the target Hospital's raw name (normalized
-    here for the lookup).
+    here for the lookup). Rows whose override_value contains "|" (the
+    coordinate-qualified "name|lat|lon" shape — see
+    _load_hospital_coord_alias_overrides()) are skipped here; those go
+    through the coordinate-aware lookup instead since a bare name can't
+    disambiguate when OSM has more than one Hospital row sharing that
+    exact name string.
     """
     from src.scrapers.manual import load_manual_overrides
 
     aliases = {}
     for o in load_manual_overrides():
-        if o.entity_type == "hospital" and o.field == "hospital_name_alias":
+        if o.entity_type == "hospital" and o.field == "hospital_name_alias" and "|" not in o.override_value:
             aliases[o.entity_key] = normalize_hospital_name(o.override_value)
     return aliases
 
 
+def _load_hospital_coord_alias_overrides() -> dict[str, tuple[str, float, float]]:
+    """Coordinate-qualified variant of _load_hospital_name_alias_overrides()
+    — needed when OSM has TWO (or more) Hospital rows sharing the exact
+    same name string, so a bare-name alias can't say which physical row
+    a scraper-reported name refers to. Real case: OSM tags two entirely
+    different hospitals both "Rumah Sakit Siloam" (one is MRCCC Siloam
+    Semanggi in South Jakarta, the other a duplicate of RS Siloam Kebon
+    Jeruk in West Jakarta, ~7km apart) — a name-only override_value
+    would match whichever "Rumah Sakit Siloam" row match_hospital_by_name
+    happens to see first, not necessarily the right one.
+
+    override_value shape: "name|lat|lon" (pipe-joined, same convention as
+    _load_duplicate_overrides() in src/registry/merge.py).
+    """
+    from src.scrapers.manual import load_manual_overrides
+
+    aliases = {}
+    for o in load_manual_overrides():
+        if o.entity_type == "hospital" and o.field == "hospital_name_alias" and "|" in o.override_value:
+            try:
+                name, lat, lon = o.override_value.split("|")
+                aliases[o.entity_key] = (name, float(lat), float(lon))
+            except ValueError:
+                log.warning("hospital_coord_alias_malformed", entity_key=o.entity_key, override_value=o.override_value)
+    return aliases
+
+
 _HOSPITAL_NAME_ALIAS_OVERRIDES = _load_hospital_name_alias_overrides()
+_HOSPITAL_COORD_ALIAS_OVERRIDES = _load_hospital_coord_alias_overrides()
+
+_COORD_ALIAS_TOLERANCE = 0.0005  # ~50m, matches src/registry/merge.py's duplicate-override tolerance
+
+
+def _resolve_coord_alias(session: Session, raw_hospital_name: str) -> Hospital | None:
+    if raw_hospital_name not in _HOSPITAL_COORD_ALIAS_OVERRIDES:
+        return None
+    name, lat, lon = _HOSPITAL_COORD_ALIAS_OVERRIDES[raw_hospital_name]
+    candidates = session.execute(select(Hospital).where(Hospital.name == name)).scalars().all()
+    for c in candidates:
+        if c.lat is None or c.lon is None:
+            continue
+        if abs(c.lat - lat) < _COORD_ALIAS_TOLERANCE and abs(c.lon - lon) < _COORD_ALIAS_TOLERANCE:
+            return c
+    return None
 
 
 def match_hospital_by_name(
@@ -250,6 +298,10 @@ def match_hospital_by_name(
     generic "RS Harapan"-style names), so narrowing the search space
     first is not just a performance optimization but a correctness one.
     """
+    coord_alias_match = _resolve_coord_alias(session, raw_hospital_name)
+    if coord_alias_match is not None:
+        return coord_alias_match
+
     if raw_hospital_name in _HOSPITAL_NAME_ALIAS_OVERRIDES:
         normalized_target = _HOSPITAL_NAME_ALIAS_OVERRIDES[raw_hospital_name]
     else:

@@ -58,7 +58,14 @@ UNIVERSE_FILTERS = ("preferred_private", "all_private", "all_hospitals")
 
 
 def _universe_query(universe: str):
-    query = select(Hospital)
+    # Hospitals manually confirmed as a duplicate of another row (see
+    # Hospital.duplicate_of_hospital_id docstring — typically a brand-
+    # only-named OSM entry a few dozen meters from a fully-named branch
+    # that already has its own scored row) never become their own
+    # scoring candidate in ANY universe — they'd otherwise show up as a
+    # phantom "confirmed_zero" duplicate of a hospital that actually has
+    # real data under its properly-named row.
+    query = select(Hospital).where(Hospital.duplicate_of_hospital_id.is_(None))
     if universe == "preferred_private":
         query = query.where(Hospital.is_preferred_group.is_(True))
     elif universe == "all_private":

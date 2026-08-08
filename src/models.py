@@ -142,6 +142,20 @@ class Hospital(Base):
     is_preferred_group: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     preferred_rank_group: Mapped[str | None] = mapped_column(String, nullable=True)
 
+    # Manual dedup marker (config/manual_overrides.csv, field=
+    # "duplicate_of") — set when a human has confirmed this Hospital row
+    # is the SAME real-world institution as another row (typically an
+    # OSM entry named only after the brand, e.g. "Siloam Hospital", that
+    # coincidentally sits within a few dozen meters of a fully-named
+    # branch, e.g. "Siloam Hospital Lippo Village", both surviving Fase
+    # 1's automated dedup because that dedup is name-similarity-first,
+    # not purely distance-first). The row itself is NEVER deleted (raw
+    # OSM provenance stays auditable) — it is simply excluded from
+    # scoring/dashboard candidate lists (Fase 6/7/8) once this is set.
+    duplicate_of_hospital_id: Mapped[int | None] = mapped_column(
+        ForeignKey("hospitals.id"), nullable=True
+    )
+
     # Dermatology service existence — kept independent from doctor count so
     # n_dermatologists_unique == 0 can be disambiguated (spec §7.6).
     has_dermatology_service: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
