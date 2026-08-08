@@ -384,13 +384,65 @@ with tab_map:
     )
     metric_spec = MAP_METRICS[map_metric]
     st.caption(
-        "Ukuran/warna marker TIDAK berdasarkan populasi atau demand proxy apa pun — "
-        "murni metrik supply internal RS (spec §10 Fase 8.4, sebelum V2). "
-        "🟢 Hijau = peluang besar · 🟠 Oranye = sedang · 🔴 Merah = peluang kecil · "
-        "Confirmed zero dokter selalu 🟢 karena merupakan scarcity yang terverifikasi. "
-        "⚪ Abu-abu = data unknown/gagal diambil; data partial hanya dapat diwarnai "
-        "untuk jumlah dokter, bukan metrik berbasis jadwal."
+        "Warna marker cuma mencerminkan kondisi internal RS itu sendiri (jumlah "
+        "dokter, jam praktik, jam kosong) — bukan seberapa ramai daerahnya atau "
+        "seberapa besar kemungkinan pasien datang ke sana. "
+        "🟢 Hijau = kelihatan ada ruang kosong buat praktik · 🟠 Oranye = sedang · "
+        "🔴 Merah = kelihatan sudah padat dokter lain. "
+        "RS dengan nol dokter yang SUDAH DIPASTIKAN (bukan sekadar belum kecatat) "
+        "selalu 🟢, karena itu kekosongan yang paling meyakinkan. "
+        "⚪ Abu-abu = datanya belum ada/gagal diambil, jadi belum bisa disimpulkan apa-apa."
     )
+
+    with st.expander("ℹ️ Penjelasan tiap pilihan metrik — nilainya dari mana, dihitung gimana, kenapa penting"):
+        st.markdown(
+            """
+**Skor opportunity** — angka gabungan (0 sampai 1) yang meranking RS berdasarkan
+seberapa besar indikasi "ruang praktik yang belum terisi". Dihitung dari 4 hal,
+masing-masing dibandingkan RELATIF terhadap RS lain (bukan angka mutlak):
+
+- Jumlah dokter yang langka dibanding RS lain (bobot 20%)
+- Jam praktik total per minggu yang sedikit dibanding RS lain (bobot 30%) — ini
+  yang paling berat, karena 2 dokter yang jarang praktik ≠ 2 dokter yang sering
+  praktik
+- Jam "ramai" (lihat definisi di bawah) yang masih kosong dari dokter kulit
+  (bobot 35%) — paling besar bobotnya, karena ini yang paling langsung
+  menunjukkan ada slot yang bisa diisi
+- Jam akhir pekan yang masih kosong (bobot 15%)
+
+Kenapa penting: ini satu-satunya angka yang menggabungkan semua sinyal jadi satu
+ranking. Tapi ingat — ini murni dari sisi PASOKAN (berapa dokter, jam berapa
+saja), BUKAN dari sisi PERMINTAAN (berapa banyak pasien di daerah situ). RS
+dengan skor tinggi belum tentu ramai pasiennya — cuma menunjukkan "kelihatannya
+ada slot kosong", bukan "pasti banyak yang butuh".
+
+**Jumlah dokter** — banyaknya dokter kulit berbeda yang terdaftar praktik di RS
+itu, dihitung dari data yang berhasil dikumpulkan (bukan sensus resmi RS).
+Kenapa penting, tapi juga kenapa HARUS hati-hati: jumlah dokter sendirian tidak
+cukup buat menyimpulkan "kosong" atau "penuh" — RS dengan 5 dokter yang jarang
+praktik bisa jadi punya lebih banyak slot kosong dibanding RS dengan 2 dokter
+yang praktik hampir tiap hari. Makanya di peta ini pakai skala tetap yang sudah
+disesuaikan sesuai pengalaman lapangan (1-3 dokter = hijau, 4-5 = oranye, 6+ =
+merah), bukan dihitung ulang otomatis dari data.
+
+**Jam dokter/minggu** — total jam praktik SEMUA dokter kulit di RS itu digabung
+dalam satu minggu (bukan jam kosong — ini jam yang SUDAH terisi dokter).
+Contoh: 3 dokter yang masing-masing praktik 10 jam/minggu = 30 jam dokter/minggu.
+Kenapa penting: ini proxy paling langsung untuk "kapasitas yang sudah terpakai" —
+makin kecil angkanya, makin besar kemungkinan RS itu punya ruang untuk dokter
+baru. Ini kenapa lebih diandalkan dibanding sekadar jumlah dokter (lihat di atas).
+
+**Gap jam ramai** — persentase slot 30 menit di jam "ramai" yang masih KOSONG
+dari dokter kulit. "Jam ramai" di sistem ini didefinisikan sebagai sore hari
+kerja (Senin–Jumat 17:00–21:00) + Sabtu pagi (08:00–14:00) — bisa diubah di
+config/prime_time.yaml, ini asumsi operasional, bukan fakta epidemiologis pasti.
+**Penting disadari:** jam siang hari kerja (mis. 12:00–14:00) TIDAK termasuk
+definisi "jam ramai" ini — jadi walaupun heatmap jadwal RS tertentu menunjukkan
+banyak slot kosong di siang hari, itu tidak ikut mempengaruhi angka ini sama
+sekali. Kalau kamu curiga siang hari juga jam ramai pasien datang, definisi ini
+perlu didiskusikan ulang, bukan salah hitung.
+            """
+        )
 
     map_df = filtered.dropna(subset=["lat", "lon"]).copy()
     map_df["metric_value"] = map_df[metric_spec.dataframe_column]
