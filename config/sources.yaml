@@ -25,11 +25,24 @@ source_tiers:
 registry_sources:
   overpass:
     tier: tier_1
-    base_url: "https://overpass-api.de/api/interpreter"
+    # overpass-api.de (endpoint resmi di spec) melarang /api/ via robots.txt
+    # -- Disallow: /api/ -- yang justru mencakup /api/interpreter. Per
+    # keputusan pengguna, dipakai mirror publik resmi (Kumi Systems) yang
+    # tidak menerbitkan robots.txt restriktif untuk path ini (dicek manual
+    # 2026-08-08, HTTP 200 di /robots.txt -> "Not Found" = tidak ada aturan
+    # disallow). Jika mirror ini nanti menerbitkan robots.txt yang melarang,
+    # scraper WAJIB berhenti sesuai spec §3.6.
+    base_url: "https://overpass.kumi.systems/api/interpreter"
     query_tag: "amenity=hospital"
-    # Verifikasi ulang bbox ini sebelum dianggap final — lihat catatan
-    # Fase 1 di PROJECT_SPEC.md §"Overpass API". Format: (south,west,north,east)
-    bbox_jabodetabek: "-6.50,106.55,-5.95,107.10"
+    # Bbox spec asli (-6.50,106.55,-5.95,107.10) TERBUKTI memotong wilayah:
+    # cek manual 2026-08-08 menemukan "RS Harapan" di lon 107.1594 (Cikarang/
+    # Bekasi timur), di luar east=107.10. Diperluas dengan margin aman untuk
+    # mencakup Kab. Tangerang barat (Kronjo/Mekar Baru, ~lon 106.35), Kab.
+    # Bogor selatan (Jasinga/Sukajaya, ~lat -6.75), Jakarta Utara pesisir
+    # (~lat -6.05), dan Bekasi/Cikarang timur (~lon 107.25). Format:
+    # (south,west,north,east). Verifikasi ulang bila registry hasil Fase 1
+    # menunjukkan indikasi RS masih terpotong di pinggir bbox ini.
+    bbox_jabodetabek: "-6.80,106.30,-5.90,107.30"
   kemkes:
     tier: tier_1
     base_url: "https://rs.kemkes.go.id"

@@ -27,7 +27,6 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
-    UniqueConstraint,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -166,7 +165,12 @@ class Hospital(Base):
         back_populates="hospital", uselist=False, cascade="all, delete-orphan"
     )
 
-    __table_args__ = (UniqueConstraint("name_normalized", "kota_kab", name="uq_hospital_name_area"),)
+    # No DB-level uniqueness constraint on (name_normalized, kota_kab):
+    # kota_kab is too coarse (e.g. all of "DKI Jakarta") to safely dedup on,
+    # and two distinct hospitals can legitimately share a normalized name
+    # within the same city. Identity/dedup is handled in the application
+    # layer by src/registry/merge.py using name similarity *and* geographic
+    # distance (spec §9 Fase 1 — no auto-merge without a proper signal).
 
     def __repr__(self) -> str:  # pragma: no cover - debug helper
         return f"<Hospital id={self.id} name={self.name!r} status={self.data_status}>"
