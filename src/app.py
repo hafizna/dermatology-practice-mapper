@@ -84,16 +84,16 @@ def _load_dashboard_dataframe(universe: str) -> pd.DataFrame:
             records.append(
                 {
                     "hospital_id": hospital.id,
-                    # display_alias (config/manual_overrides.csv) is
-                    # shown ALONGSIDE the raw OSM name, never replacing
-                    # it — e.g. OSM's "Rumah Sakit Siloam" really is
-                    # MRCCC Siloam Semanggi, but that alias is a human
-                    # annotation, not the source-of-record name.
-                    "Hospital": (
-                        f"{hospital.name} (a.k.a. {hospital.display_alias})"
-                        if hospital.display_alias
-                        else hospital.name
-                    ),
+                    # display_alias (config/manual_overrides.csv) is shown
+                    # INSTEAD of the raw OSM name when present — e.g.
+                    # OSM's "Rumah Sakit Siloam" really is MRCCC Siloam
+                    # Semanggi, and showing the recognizable alias alone
+                    # reads much easier than "Rumah Sakit Siloam (a.k.a.
+                    # MRCCC Siloam Semanggi)" (user feedback 2026-08-09).
+                    # Hospital.name itself is UNCHANGED in the database —
+                    # this is purely a display-layer substitution, so the
+                    # raw OSM provenance is still intact for audit.
+                    "Hospital": hospital.display_alias or hospital.name,
                     "Group": hospital.preferred_rank_group or "(bukan target group)",
                     "is_preferred_group": hospital.is_preferred_group,
                     "ownership": hospital.ownership,
