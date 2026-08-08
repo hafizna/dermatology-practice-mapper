@@ -154,6 +154,11 @@ def _hospital_names_rs_premier(record: RawDoctorRecord) -> list[str]:
     return [name] if name else []
 
 
+def _hospital_names_columbia_asia(record: RawDoctorRecord) -> list[str]:
+    name = record.raw_payload.get("branch_name", "")
+    return [name] if name else []
+
+
 def _hospital_names_primaya(record: RawDoctorRecord) -> list[str]:
     # card.location is a bare city/area name (e.g. "Bekasi"), NOT a full
     # hospital name — unusable for hospital-row matching. The real branch
@@ -216,6 +221,7 @@ _HOSPITAL_NAME_EXTRACTORS = {
     "brawijaya": _hospital_names_brawijaya,
     "sari_asih": _hospital_names_sari_asih,
     "rs_premier": _hospital_names_rs_premier,
+    "columbia_asia": _hospital_names_columbia_asia,
     "primaya": _hospital_names_primaya,
     "eka": _hospital_names_eka,
 }

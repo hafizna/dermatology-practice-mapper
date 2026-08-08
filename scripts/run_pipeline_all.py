@@ -29,6 +29,7 @@ from src.models import Doctor, ScheduleSlot
 from src.scrapers import eka as eka_module
 from src.scrapers.bethsaida import BethsaidaScraper
 from src.scrapers.brawijaya import BrawijayaScraper
+from src.scrapers.columbia_asia import ColumbiaAsiaScraper
 from src.scrapers.emc import EmcScraper
 from src.scrapers.hermina import HerminaScraper
 from src.scrapers.mayapada import MayapadaScraper
@@ -51,6 +52,7 @@ NETWORK_SOURCES = [
     ("bethsaida", BethsaidaScraper, "Bethsaida"),
     ("rs_pondok_indah", RsPondokIndahScraper, "RS Pondok Indah"),
     ("brawijaya", BrawijayaScraper, "Brawijaya"),
+    ("columbia_asia", ColumbiaAsiaScraper, "Columbia Asia"),
     ("sari_asih", SariAsihScraper, "Sari Asih"),
     ("rs_premier", RsPremierScraper, "RS Premier"),
 ]

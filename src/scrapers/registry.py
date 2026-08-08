@@ -18,6 +18,7 @@ from src.logging_setup import get_logger
 from src.scrapers import eka as eka_module
 from src.scrapers.bethsaida import BethsaidaScraper
 from src.scrapers.brawijaya import BrawijayaScraper
+from src.scrapers.columbia_asia import ColumbiaAsiaScraper
 from src.scrapers.emc import EmcScraper
 from src.scrapers.hermina import HerminaScraper
 from src.scrapers.mayapada import MayapadaScraper
@@ -43,6 +44,7 @@ ADAPTERS: dict[str, object] = {
     "bethsaida": BethsaidaScraper,
     "rs_pondok_indah": RsPondokIndahScraper,
     "brawijaya": BrawijayaScraper,
+    "columbia_asia": ColumbiaAsiaScraper,
     "sari_asih": SariAsihScraper,
     "rs_premier": RsPremierScraper,
     "eka": eka_module,  # manual snapshot, not a BaseScraper subclass

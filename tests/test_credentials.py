@@ -153,6 +153,18 @@ def test_full_word_english_dermatology_and_venereology():
     assert is_dermatologist_credential("Dermatology and Venereology Specialist") is True
 
 
+def test_exact_english_dermatology_specialty_label():
+    assert is_dermatologist_credential("DERMATOLOGY") is True
+
+
+def test_dermatology_does_not_match_as_part_of_longer_word():
+    assert is_dermatologist_credential("pseudodermatologyish") is False
+
+
+def test_dermatology_assistant_label_is_not_a_specialist_credential():
+    assert is_dermatologist_credential("dermatology assistant") is False
+
+
 def test_multiple_credentials_dermatology_not_first():
     # A dual-boarded physician's non-dermatology credential must not mask
     # a real dermatology credential appearing later in the same string.

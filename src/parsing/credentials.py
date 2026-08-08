@@ -141,6 +141,13 @@ def is_dermatologist_credential(text: str) -> bool:
 
     normalized = _normalize(text)
 
+    # Some official hospital sources expose only this exact English
+    # specialty label rather than a credential suffix. Keep the allowance
+    # exact so phrases such as "dermatology assistant" are not mistaken
+    # for a specialist credential.
+    if normalized.strip().casefold() == "dermatology":
+        return True
+
     if _COMBINED_FULL_WORD_RE.search(normalized):
         return True
 

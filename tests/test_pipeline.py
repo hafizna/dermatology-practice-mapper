@@ -144,6 +144,19 @@ def test_extract_rspi_multiple_branches_from_doctor_schedule():
     assert names == ["RS Pondok Indah - Puri Indah", "RS Pondok Indah - Bintaro Jaya"]
 
 
+def test_extract_columbia_asia_branch_name():
+    record = RawDoctorRecord(
+        raw_name="dr. Contoh",
+        raw_credentials_text="DERMATOLOGY",
+        raw_schedule_entries=[],
+        source_url="",
+        raw_payload={"branch_name": "RS Columbia Asia BSD"},
+    )
+    assert extract_hospital_names(record, source="columbia_asia") == [
+        "RS Columbia Asia BSD"
+    ]
+
+
 def test_extract_unrecognized_source_returns_empty():
     record = RawDoctorRecord(
         raw_name="dr. Contoh", raw_credentials_text="dr. Contoh, Sp.KK", raw_schedule_entries=[], source_url="", raw_payload={}
