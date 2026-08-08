@@ -1,0 +1,49 @@
+{
+  "success": true,
+  "code": 200,
+  "status": "OK",
+  "message": "OK",
+  "data": {
+    "Hermina Depok": {
+      "Klinik Kulit dan Kelamin": [
+        {
+          "id": "1",
+          "day": "monday",
+          "day_integer": 1,
+          "from_time": "10:00",
+          "to_time": "12:00",
+          "time": "10:00 - 12:00",
+          "schedule_type": "executive",
+          "clinic_name": "Klinik Kulit dan Kelamin",
+          "partial_holiday": false
+        },
+        {
+          "id": "1",
+          "day": "wednesday",
+          "day_integer": 3,
+          "from_time": "13:00",
+          "to_time": "15:00",
+          "time": "13:00 - 15:00",
+          "schedule_type": "executive",
+          "clinic_name": "Klinik Kulit dan Kelamin",
+          "partial_holiday": false
+        }
+      ]
+    },
+    "Hermina Jatinegara": {
+      "Klinik Kulit dan Kelamin": [
+        {
+          "id": "2",
+          "day": "friday",
+          "day_integer": 5,
+          "from_time": "17:00",
+          "to_time": "19:00",
+          "time": "17:00 - 19:00",
+          "schedule_type": "executive",
+          "clinic_name": "Klinik Kulit dan Kelamin",
+          "partial_holiday": false
+        }
+      ]
+    }
+  }
+}

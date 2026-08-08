@@ -1,0 +1,163 @@
+{
+  "status": true,
+  "message": "OK",
+  "meta": {
+    "page": 1,
+    "per_page": 100,
+    "total_page": 1,
+    "total": 5
+  },
+  "data": [
+    {
+      "ref_id": "bbbb0000-0000-0000-0000-000000000001",
+      "external_id": "HR90000001",
+      "has_schedule": true,
+      "doctor": {
+        "ref_id": "cccc0000-0000-0000-0000-000000000001",
+        "slug": "dr-anonim-contoh-empat-spdve",
+        "name": "dr. Anonim Contoh Empat, SpDVE",
+        "profile": "<p>-</p>"
+      },
+      "clinic": {
+        "ref_id": "dddd0000-0000-0000-0000-000000000001",
+        "slug": "mitra-keluarga-kemayoran-0px39n9",
+        "name": "Mitra Keluarga Kemayoran",
+        "type": "SAP"
+      },
+      "speciality": {
+        "name": "Kulit & Penyakit Kelamin",
+        "slug": "kulit-and-penyakit-kelamin-8owtyp"
+      },
+      "schedules": [
+        {
+          "date": "2026-08-09",
+          "day": "Minggu",
+          "start_time": "10:00",
+          "end_time": "12:00",
+          "on_leave": false
+        },
+        {
+          "date": "2026-08-10",
+          "day": "Senin",
+          "start_time": "10:00",
+          "end_time": "13:00",
+          "on_leave": false
+        },
+        {
+          "date": "2026-08-17",
+          "day": "Senin",
+          "start_time": "10:00",
+          "end_time": "13:00",
+          "on_leave": false
+        }
+      ]
+    },
+    {
+      "ref_id": "bbbb0000-0000-0000-0000-000000000002",
+      "external_id": "HR90000002",
+      "has_schedule": true,
+      "doctor": {
+        "ref_id": "cccc0000-0000-0000-0000-000000000002",
+        "slug": "dr-anonim-contoh-lima-spkk",
+        "name": "dr. Anonim Contoh Lima, Sp.KK",
+        "profile": "<p>-</p>"
+      },
+      "clinic": {
+        "ref_id": "dddd0000-0000-0000-0000-000000000002",
+        "slug": "mitra-keluarga-bekasi-timur",
+        "name": "Mitra Keluarga Bekasi Timur",
+        "type": "SAP"
+      },
+      "speciality": {
+        "name": "Kulit & Penyakit Kelamin",
+        "slug": "kulit-and-penyakit-kelamin-8owtyp"
+      },
+      "schedules": [
+        {
+          "date": "2026-08-11",
+          "day": "Selasa",
+          "start_time": "15:00",
+          "end_time": "18:00",
+          "on_leave": false
+        }
+      ]
+    },
+    {
+      "ref_id": "bbbb0000-0000-0000-0000-000000000003",
+      "external_id": "HR90000003",
+      "has_schedule": true,
+      "doctor": {
+        "ref_id": "cccc0000-0000-0000-0000-000000000003",
+        "slug": "dr-anonim-contoh-enam-spdv",
+        "name": "dr. Anonim Contoh Enam, SpDV",
+        "profile": "<p>-</p>"
+      },
+      "clinic": {
+        "ref_id": "dddd0000-0000-0000-0000-000000000003",
+        "slug": "mitra-keluarga-surabaya",
+        "name": "Mitra Keluarga Surabaya",
+        "type": "SAP"
+      },
+      "speciality": {
+        "name": "Kulit & Penyakit Kelamin",
+        "slug": "kulit-and-penyakit-kelamin-8owtyp"
+      },
+      "schedules": [
+        {
+          "date": "2026-08-12",
+          "day": "Rabu",
+          "start_time": "09:00",
+          "end_time": "12:00",
+          "on_leave": false
+        }
+      ]
+    },
+    {
+      "ref_id": "bbbb0000-0000-0000-0000-000000000004",
+      "external_id": "HR90000004",
+      "has_schedule": false,
+      "doctor": {
+        "ref_id": "cccc0000-0000-0000-0000-000000000004",
+        "slug": "dr-anonim-contoh-tujuh-spdve",
+        "name": "dr. Anonim Contoh Tujuh, SpDVE",
+        "profile": "<p>-</p>"
+      },
+      "clinic": {
+        "ref_id": "dddd0000-0000-0000-0000-000000000004",
+        "slug": "mitra-keluarga-tegal",
+        "name": "Mitra Keluarga Tegal",
+        "type": "SAP"
+      },
+      "speciality": {
+        "name": "Kulit & Penyakit Kelamin",
+        "slug": "kulit-and-penyakit-kelamin-8owtyp"
+      },
+      "schedules": []
+    },
+    {
+      "ref_id": "bbbb0000-0000-0000-0000-000000000005",
+      "external_id": "HR90000005",
+      "has_schedule": true,
+      "doctor": {
+        "ref_id": "cccc0000-0000-0000-0000-000000000005",
+        "slug": "dr-anonim-contoh-delapan-spkk",
+        "name": "dr. Anonim Contoh Delapan, Sp.KK",
+        "profile": "<p>-</p>"
+      },
+      "clinic": null,
+      "speciality": {
+        "name": "Kulit & Penyakit Kelamin",
+        "slug": "kulit-and-penyakit-kelamin-8owtyp"
+      },
+      "schedules": [
+        {
+          "date": "2026-08-13",
+          "day": "Kamis",
+          "start_time": "10:00",
+          "end_time": "12:00",
+          "on_leave": false
+        }
+      ]
+    }
+  ]
+}

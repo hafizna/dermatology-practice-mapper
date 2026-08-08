@@ -174,6 +174,55 @@ class BaseScraper(ABC):
         log.info("scraper_fetch_ok", group=self.group_name, url=url, cache_path=str(cache_path))
         return payload
 
+    def _html_cache_path(self, hospital_slug: str, cache_key: str) -> Path:
+        today = dt.date.today().isoformat()
+        safe_key = cache_key.replace("/", "_").replace("?", "_").replace("&", "_")[:150]
+        return DATA_DIR / "raw" / self.group_name / today / hospital_slug / f"{safe_key}.html"
+
+    @retry(
+        retry=retry_if_exception_type(NetworkError),
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=1, max=10),
+        reraise=True,
+    )
+    def _get_html(self, url: str, *, hospital_slug: str, cache_key: str, params: dict | None = None) -> str:
+        """GET an HTML page with the same caching/rate-limit/retry/error
+        machinery as _get_json, for sources where structured data is
+        embedded in server-rendered HTML (e.g. Next.js RSC streaming
+        payload) rather than exposed as a separate JSON API (spec §3.7:
+        HTML parsing only when no structured source is available — here
+        the "structure" is a JSON blob embedded in the HTML, extracted by
+        the caller, not tag/selector scraping).
+        """
+        cache_path = self._html_cache_path(hospital_slug, cache_key)
+        if self.use_cache and cache_path.exists():
+            log.debug("scraper_cache_hit", group=self.group_name, cache_path=str(cache_path))
+            return cache_path.read_text(encoding="utf-8")
+
+        self._rate_limiter.wait(url)
+        try:
+            with httpx.Client(timeout=30.0, headers=self._headers) as client:
+                resp = client.get(url, params=params)
+        except httpx.TimeoutException as exc:
+            raise NetworkError(f"timeout fetching {url}") from exc
+        except httpx.ConnectError as exc:
+            raise NetworkError(f"connect error fetching {url}") from exc
+
+        if resp.status_code in (403, 429):
+            raise BlockedError(
+                f"blocked (HTTP {resp.status_code}) fetching {url} — stopping per spec §3.6, no evasion."
+            )
+        if resp.status_code >= 500:
+            raise NetworkError(f"server error (HTTP {resp.status_code}) fetching {url}")
+        if resp.status_code >= 400:
+            raise StructureChangedError(f"unexpected HTTP {resp.status_code} fetching {url}")
+
+        html = resp.text
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+        cache_path.write_text(html, encoding="utf-8")
+        log.info("scraper_fetch_ok", group=self.group_name, url=url, cache_path=str(cache_path))
+        return html
+
     def provenance(self, source_url: str) -> dict:
         return {
             "source_url": source_url,
