@@ -387,8 +387,9 @@ with tab_map:
         "Ukuran/warna marker TIDAK berdasarkan populasi atau demand proxy apa pun — "
         "murni metrik supply internal RS (spec §10 Fase 8.4, sebelum V2). "
         "🟢 Hijau = peluang besar · 🟠 Oranye = sedang · 🔴 Merah = peluang kecil · "
-        "⚪ Abu-abu = data unknown atau confirmed_zero; data partial hanya dapat "
-        "diwarnai untuk jumlah dokter, bukan metrik berbasis jadwal."
+        "Confirmed zero dokter selalu 🟢 karena merupakan scarcity yang terverifikasi. "
+        "⚪ Abu-abu = data unknown/gagal diambil; data partial hanya dapat diwarnai "
+        "untuk jumlah dokter, bukan metrik berbasis jadwal."
     )
 
     map_df = filtered.dropna(subset=["lat", "lon"]).copy()

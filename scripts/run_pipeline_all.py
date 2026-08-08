@@ -36,6 +36,7 @@ from src.scrapers.mayapada import MayapadaScraper
 from src.scrapers.mitra_keluarga import MitraKeluargaScraper
 from src.scrapers.pipeline import persist_raw_doctor_records
 from src.scrapers.primaya import PrimayaScraper
+from src.scrapers.radjak import RadjakScraper
 from src.scrapers.rs_pondok_indah import RsPondokIndahScraper
 from src.scrapers.rs_premier import RsPremierScraper
 from src.scrapers.sari_asih import SariAsihScraper
@@ -53,6 +54,7 @@ NETWORK_SOURCES = [
     ("rs_pondok_indah", RsPondokIndahScraper, "RS Pondok Indah"),
     ("brawijaya", BrawijayaScraper, "Brawijaya"),
     ("columbia_asia", ColumbiaAsiaScraper, "Columbia Asia"),
+    ("radjak", RadjakScraper, "Radjak Hospital"),
     ("sari_asih", SariAsihScraper, "Sari Asih"),
     ("rs_premier", RsPremierScraper, "RS Premier"),
 ]

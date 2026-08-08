@@ -2,6 +2,10 @@
 data/raw/
 data/processed/
 data/manual_uploads/
+# Browser exports are copied into the dated, ignored manual-upload tree.
+# Keep the originals out of Git too: they contain real doctor names.
+/Dokter Spesialis Kulit dan Kelamin di Eka Hospital.html
+/Dokter Spesialis Kulit dan Kelamin di Eka Hospital_files/
 *.sqlite
 *.sqlite3
 *.db

@@ -157,6 +157,19 @@ def test_extract_columbia_asia_branch_name():
     ]
 
 
+def test_extract_radjak_branch_name():
+    record = RawDoctorRecord(
+        raw_name="dr. Contoh, Sp.DVE",
+        raw_credentials_text="dr. Contoh, Sp.DVE",
+        raw_schedule_entries=[],
+        source_url="",
+        raw_payload={"branch_name": "Radjak Hospital Salemba"},
+    )
+    assert extract_hospital_names(record, source="radjak") == [
+        "Radjak Hospital Salemba"
+    ]
+
+
 def test_extract_unrecognized_source_returns_empty():
     record = RawDoctorRecord(
         raw_name="dr. Contoh", raw_credentials_text="dr. Contoh, Sp.KK", raw_schedule_entries=[], source_url="", raw_payload={}

@@ -32,17 +32,26 @@ def test_lower_value_is_greener_for_supply_metrics(metric_key):
     assert classify_marker(9.0, data_quality="complete", spec=spec, boundaries=bounds).color == "red"
 
 
-def test_confirmed_zero_is_gray_and_excluded_for_every_metric():
+def test_confirmed_zero_is_green_and_excluded_from_tercile_scale_for_every_metric():
     for metric_key in MAP_METRICS:
         spec = MAP_METRICS[metric_key]
         bounds = CategoryBoundaries(0, 3, 6, 9)
         category = classify_marker(
             0.0, data_quality="confirmed_zero", spec=spec, boundaries=bounds
         )
-        assert category.color == "gray"
+        assert category.color == "green"
         assert not metric_value_participates_in_scale(
             0.0, data_quality="confirmed_zero", spec=spec
         )
+
+
+def test_confirmed_zero_is_green_even_when_schedule_metric_is_naturally_missing():
+    bounds = CategoryBoundaries(0, 3, 6, 9)
+    for metric_key in ("Derm hrs/wk", "prime_gap_ratio_display"):
+        spec = MAP_METRICS[metric_key]
+        assert classify_marker(
+            None, data_quality="confirmed_zero", spec=spec, boundaries=bounds
+        ).color == "green"
 
 
 @pytest.mark.parametrize("missing", [None, math.nan])
@@ -118,6 +127,7 @@ def test_empty_and_uniform_scales_have_explicit_legends():
     empty = calculate_category_boundaries([])
     assert not empty.has_values
     assert "tidak ada nilai" in format_metric_legend(spec, empty)
+    assert "confirmed zero tetap hijau" in format_metric_legend(spec, empty)
 
     uniform = calculate_category_boundaries([2, 2, 2])
     assert uniform.has_values

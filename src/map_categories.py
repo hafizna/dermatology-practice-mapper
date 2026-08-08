@@ -18,7 +18,6 @@ class MapMetricSpec:
     label: str
     dataframe_column: str
     higher_is_more_opportunity: bool
-    gray_confirmed_zero: bool
     allow_partial: bool
     decimals: int
 
@@ -40,16 +39,16 @@ class CategoryBoundaries:
 
 MAP_METRICS: dict[str, MapMetricSpec] = {
     "Opportunity": MapMetricSpec(
-        "Opportunity", "Skor opportunity", "Opportunity", True, True, False, 2
+        "Opportunity", "Skor opportunity", "Opportunity", True, False, 2
     ),
     "Derm": MapMetricSpec(
-        "Derm", "Jumlah dokter", "Derm", False, True, True, 0
+        "Derm", "Jumlah dokter", "Derm", False, True, 0
     ),
     "Derm hrs/wk": MapMetricSpec(
-        "Derm hrs/wk", "Jam dokter/minggu", "Derm hrs/wk", False, True, False, 1
+        "Derm hrs/wk", "Jam dokter/minggu", "Derm hrs/wk", False, False, 1
     ),
     "prime_gap_ratio_display": MapMetricSpec(
-        "prime_gap_ratio_display", "Gap jam ramai", "Gap jam ramai", True, True, False, 2
+        "prime_gap_ratio_display", "Gap jam ramai", "Gap jam ramai", True, False, 2
     ),
 }
 
@@ -102,12 +101,16 @@ def classify_marker(
     Raw-value order is reversed for doctor count and doctor-hours because
     lower internal supply means larger practice opportunity.
     """
+    if data_quality == "confirmed_zero":
+        # Complete official group coverage establishes that this branch
+        # really has no listed dermatologist. That is maximum internal
+        # scarcity/opportunity, even where a schedule-derived metric is
+        # naturally absent because no doctor exists to have a schedule.
+        return MarkerCategory("green", "peluang besar (confirmed zero dokter)")
     if _is_missing(value):
         return MarkerCategory("gray", "data tidak tersedia")
     if data_quality == "unknown":
         return MarkerCategory("gray", "data tidak tersedia")
-    if data_quality == "confirmed_zero":
-        return MarkerCategory("gray", "confirmed zero (kategori khusus)")
     if data_quality == "partial" and not spec.allow_partial:
         return MarkerCategory("gray", "data jadwal belum cukup")
     if boundaries.maximum <= boundaries.minimum:
@@ -137,7 +140,10 @@ def format_metric_legend(spec: MapMetricSpec, boundaries: CategoryBoundaries) ->
     """Legend whose displayed thresholds exactly match ``classify_marker``."""
     direction = "nilai lebih tinggi" if spec.higher_is_more_opportunity else "nilai lebih rendah"
     if not boundaries.has_values:
-        return f"**{spec.label}:** tidak ada nilai yang tersedia; semua marker berwarna abu-abu."
+        return (
+            f"**{spec.label}:** tidak ada nilai yang dapat membentuk tercile; "
+            "unknown tetap abu-abu dan confirmed zero tetap hijau."
+        )
     if boundaries.maximum <= boundaries.minimum:
         value_text = _format_value(boundaries.minimum, spec.decimals)
         return (

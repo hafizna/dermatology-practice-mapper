@@ -86,8 +86,10 @@ doctor_schedule_sources:
       (headless, bukan UA palsu). curl dengan UA browser biasa sempat lolos
       sekali, tapi itu bot-protection yang tidak konsisten, bukan akses
       normal — TIDAK dipakai karena akan jadi UA spoofing (dilarang §3.6).
-      Diganti oleh Siloam sebagai pilot adapter Fase 2 (keputusan pengguna).
-      Revisit hanya jika ada jalur akses resmi/izin dari pihak Eka.
+      Listing dokter dipasok melalui snapshot browser manual; snapshot terbaru
+      2026-08-09 berisi 35 kartu nasional / 32 kartu Jabodetabek dan identik
+      dengan snapshot 2026-08-08. Listing ini tidak memuat jadwal. Revisit
+      scraping live hanya jika ada jalur akses resmi/izin dari pihak Eka.
   siloam:
     tier: tier_1
     display_name: "Siloam Hospitals"
@@ -267,6 +269,34 @@ doctor_schedule_sources:
       DERMATOLOGY. ID lokasi ditemukan dari filter resmi, bukan diduplikasi
       di adapter. Cabang Jabodetabek adalah BSD dan Pulomas; profil dokter
       masing-masing memuat tabel jadwal mingguan server-rendered.
+  radjak:
+    tier: tier_1
+    display_name: "Radjak Hospital"
+    base_urls:
+      - "https://www.radjakhospital.com"
+    requires_js: false
+    access_status: "accessible"
+    notes: >
+      Dicek 2026-08-09: robots.txt tidak tersedia (path mengembalikan halaman
+      404 biasa). Halaman /dokter server-rendered; spesialis=17 adalah Kulit
+      dan Kelamin dan setiap kartu memuat cabang serta jadwal mingguan.
+      Filter resmi salah memasukkan satu dokter Sp.PK sehingga adapter tetap
+      mewajibkan validasi kredensial dermatologi. Purwakarta dikecualikan dari
+      hasil Jabodetabek.
+  sentra_medika:
+    tier: tier_1
+    display_name: "Sentra Medika Hospital Group"
+    base_urls:
+      - "https://sentramedikahospitals.com"
+    requires_js: true
+    access_status: "blocked"
+    notes: >
+      Dicek 2026-08-09: halaman /doctors boleh diakses tetapi hanya merender
+      shell awal tanpa data dokter. robots.txt melarang /api/, /profile/, dan
+      /_next/ sehingga endpoint/filter dinamis DVE serta Kulit dan Kelamin
+      tidak boleh dipakai oleh scraper. Cabang registry yang terverifikasi
+      tetap masuk preferred group sebagai unknown; tidak dibuat adapter yang
+      melanggar robots atau mengubah unknown menjadi zero.
 
 aggregator_sources:
   alodokter:

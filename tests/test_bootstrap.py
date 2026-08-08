@@ -36,6 +36,8 @@ def test_hospital_preferences_config_loads() -> None:
     cfg = HospitalPreferencesConfig.load()
     assert "Eka Hospital" in cfg.preferred_groups
     assert "Columbia Asia" in cfg.preferred_groups
+    assert "Radjak Hospital" in cfg.preferred_groups
+    assert "Sentra Medika Hospital Group" in cfg.preferred_groups
     assert "swasta" in cfg.include_ownership
     # manual_preference must never silently leak into Layer A weighting —
     # this test only checks the file parses, not that it's used correctly

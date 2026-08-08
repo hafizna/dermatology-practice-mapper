@@ -24,6 +24,7 @@ from src.scrapers.hermina import HerminaScraper
 from src.scrapers.mayapada import MayapadaScraper
 from src.scrapers.mitra_keluarga import MitraKeluargaScraper
 from src.scrapers.primaya import PrimayaScraper
+from src.scrapers.radjak import RadjakScraper
 from src.scrapers.rs_pondok_indah import RsPondokIndahScraper
 from src.scrapers.rs_premier import RsPremierScraper
 from src.scrapers.sari_asih import SariAsihScraper
@@ -45,6 +46,7 @@ ADAPTERS: dict[str, object] = {
     "rs_pondok_indah": RsPondokIndahScraper,
     "brawijaya": BrawijayaScraper,
     "columbia_asia": ColumbiaAsiaScraper,
+    "radjak": RadjakScraper,
     "sari_asih": SariAsihScraper,
     "rs_premier": RsPremierScraper,
     "eka": eka_module,  # manual snapshot, not a BaseScraper subclass
