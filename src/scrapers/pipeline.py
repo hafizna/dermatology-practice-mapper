@@ -463,11 +463,26 @@ def persist_raw_doctor_records(
             continue
 
         any_matched = False
+        hospital_ids_already_persisted: set[int] = set()
         for raw_hospital_name in hospital_names:
             hospital = match_hospital_by_name(session, raw_hospital_name, preferred_group=preferred_group)
             if hospital is None:
                 summary["unmatched_hospital_names"].append(raw_hospital_name)
                 continue
+
+            if hospital.id in hospital_ids_already_persisted:
+                # Same physical hospital reported under 2+ different raw
+                # names within ONE doctor record (real case, confirmed
+                # 2026-08-09: Siloam's own API reports one doctor's
+                # availability twice for the same Lippo Village branch,
+                # once as "Siloam Hospitals Lippo Village" and once as
+                # "Rumah Sakit Umum Siloam Lippo Village" — both resolve
+                # to the same registry Hospital row). Persisting a second
+                # Doctor row here would silently double the hospital's
+                # doctor count and doctor-hours — skip, not a new branch.
+                any_matched = True  # still counts as a successful match, just not a NEW doctor row
+                continue
+            hospital_ids_already_persisted.add(hospital.id)
 
             doctor = persist_doctor_record(
                 session,

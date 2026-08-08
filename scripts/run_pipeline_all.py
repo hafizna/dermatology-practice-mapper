@@ -1,9 +1,20 @@
 """Fase 4.5: run scrape (cache replay) -> parse -> persist for every
 registered adapter, in one DB transaction per source, and print a summary
 table. Ad-hoc operational script (not part of the CLI yet — Fase 8 will
-likely wire a proper `pipeline run` command); safe to re-run since it
-reads from the on-disk scraper cache (use_cache=True) rather than hitting
-live sites again.
+likely wire a proper `pipeline run` command).
+
+IMPORTANT: main() clears the doctors/schedule_slots tables before
+persisting, so re-running this script is idempotent — it will NOT keep
+appending duplicate Doctor/ScheduleSlot rows the way it silently did
+before this was added. (Real incident, 2026-08-09: repeated manual runs
+during a dashboard-review session — each verifying a manual_overrides.csv
+change without resetting the DB first — quadrupled some hospitals'
+doctor counts, e.g. RS Pondok Indah - Puri Indah showing 52
+"dermatologists" that were actually 13 real ones counted 4x. Caught by
+the user visually spotting an implausible number on the dashboard map,
+not by any automated check.) The Hospital registry table itself is left
+untouched here — src/registry/merge.py's own fetch-registry pipeline
+handles clearing/re-inserting that one.
 """
 
 from __future__ import annotations
@@ -14,6 +25,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src.db import session_scope
+from src.models import Doctor, ScheduleSlot
 from src.scrapers import eka as eka_module
 from src.scrapers.bethsaida import BethsaidaScraper
 from src.scrapers.brawijaya import BrawijayaScraper
@@ -41,6 +53,11 @@ NETWORK_SOURCES = [
 
 
 def main() -> None:
+    with session_scope() as session:
+        n_slots = session.query(ScheduleSlot).delete()
+        n_doctors = session.query(Doctor).delete()
+    print(f"Dibersihkan sebelum re-run: {n_doctors} baris doctors, {n_slots} baris schedule_slots.\n")
+
     results = {}
 
     for source, adapter_cls, preferred_group in NETWORK_SOURCES:

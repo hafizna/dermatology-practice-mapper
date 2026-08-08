@@ -309,6 +309,40 @@ def test_full_pipeline_summary_counts(db_session):
     assert summary["hospital_unmatched"] == 1
 
 
+def test_same_hospital_reported_under_two_names_does_not_duplicate_doctor(db_session):
+    # Regression guard for a real bug (2026-08-09): Siloam's own API
+    # reported one doctor's availability at the SAME physical hospital
+    # under two different raw names ("Siloam Hospitals Lippo Village"
+    # and "Rumah Sakit Umum Siloam Lippo Village") within one doctor
+    # record — both resolve to the same registry Hospital row, so a
+    # single doctor was silently persisted TWICE, inflating that
+    # hospital's doctor count (one real hospital showed 52
+    # "dermatologists" that were actually 13 real ones counted 4x after
+    # repeated pipeline re-runs compounded this per-run duplication).
+    hospital = _make_hospital(db_session, "RS SILOAM LIPPO VILLAGE", group="Siloam")
+    records = [
+        RawDoctorRecord(
+            raw_name="dr. Hannah Damar, Sp.DVE",
+            raw_credentials_text="dr. Hannah Damar, Sp.DVE",
+            raw_schedule_entries=[],
+            source_url="",
+            raw_payload={
+                "availability": [
+                    {"hospital_name": "Siloam Hospitals Lippo Village"},
+                    {"hospital_name": "Rumah Sakit Umum Siloam Lippo Village"},
+                ]
+            },
+        )
+    ]
+    summary = persist_raw_doctor_records(db_session, records, source="siloam", preferred_group="Siloam")
+    assert summary["doctors_created"] == 1  # not 2
+
+    from src.models import Doctor
+
+    doctors = db_session.query(Doctor).filter(Doctor.hospital_id == hospital.id).all()
+    assert len(doctors) == 1
+
+
 def test_full_pipeline_multi_branch_doctor_creates_multiple_doctor_rows(db_session):
     # Fictitious branch names ("Contoh A"/"Contoh B") deliberately used
     # here rather than a real RS Pondok Indah branch name, since real
