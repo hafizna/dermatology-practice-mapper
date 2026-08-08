@@ -36,6 +36,9 @@ Thumbs.db
 .vscode/
 .idea/
 
+# --- Claude Code session artifacts ---
+.claude/scheduled_tasks.lock
+
 # --- Secrets / local env ---
 .env
 .env.*

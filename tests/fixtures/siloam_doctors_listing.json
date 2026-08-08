@@ -1,0 +1,48 @@
+{
+  "status": "OK",
+  "message": "Success",
+  "data": [
+    {
+      "doctor_id": "aaaa1111-0000-0000-0000-000000000001",
+      "name": "dr. Anonim Contoh Satu, SpDVE",
+      "doctor_hope_id": 9000000001,
+      "hospital_names": "Siloam Hospitals Kebon Jeruk",
+      "specialization_id": "266f7854-4f5e-462e-8267-2ada967ecf51",
+      "speciality_id": "44d54965-b740-451c-9fec-a21b6e7544bf",
+      "specialization_name": "Dermatologi (Kulit)",
+      "specialization_name_en": "Dermatology (Skin)",
+      "sub_specialization_name": "Spesialis Dermatologi Venereologi Estetika",
+      "doctor_seo_key": "dr-anonim-contoh-satu-spdve",
+      "is_have_schedule": true,
+      "next_avail": "2026-08-10"
+    },
+    {
+      "doctor_id": "aaaa1111-0000-0000-0000-000000000002",
+      "name": "dr. Anonim Contoh Dua, Sp.KK",
+      "doctor_hope_id": 9000000002,
+      "hospital_names": "Siloam Heart Hospital",
+      "specialization_id": "266f7854-4f5e-462e-8267-2ada967ecf51",
+      "speciality_id": "44d54965-b740-451c-9fec-a21b6e7544bf",
+      "specialization_name": "Dermatologi (Kulit)",
+      "specialization_name_en": "Dermatology (Skin)",
+      "sub_specialization_name": "Spesialis Dermatologi Venereologi Estetika",
+      "doctor_seo_key": "dr-anonim-contoh-dua-spkk",
+      "is_have_schedule": true,
+      "next_avail": "2026-08-09"
+    },
+    {
+      "doctor_id": "aaaa1111-0000-0000-0000-000000000003",
+      "name": "dr. Anonim Contoh Tiga, SpDVE",
+      "doctor_hope_id": 9000000003,
+      "hospital_names": "Siloam Hospitals Surabaya",
+      "specialization_id": "266f7854-4f5e-462e-8267-2ada967ecf51",
+      "speciality_id": "44d54965-b740-451c-9fec-a21b6e7544bf",
+      "specialization_name": "Dermatologi (Kulit)",
+      "specialization_name_en": "Dermatology (Skin)",
+      "sub_specialization_name": "Spesialis Dermatologi Venereologi Estetika",
+      "doctor_seo_key": "dr-anonim-contoh-tiga-spdve",
+      "is_have_schedule": true,
+      "next_avail": "2026-08-11"
+    }
+  ]
+}

@@ -143,6 +143,10 @@ class DoctorScheduleSourceEntry(BaseModel):
     display_name: str
     base_urls: list[str] = Field(default_factory=list)
     requires_js: bool | None = None
+    # "accessible" | "blocked" | null (not yet checked) — recon-level
+    # signal only, not a guarantee the doctor/schedule structure has been
+    # mapped (that happens per-adapter in Fase 3).
+    access_status: str | None = None
     notes: str | None = None
 
 

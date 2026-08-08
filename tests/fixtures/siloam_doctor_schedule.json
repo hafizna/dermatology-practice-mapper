@@ -1,0 +1,59 @@
+{
+  "status": "OK",
+  "message": "Success - Get Schedule With Availability",
+  "data": {
+    "doctor": {
+      "name": "dr. Anonim Contoh Satu, SpDVE",
+      "specialization_name": "Dermatologi (Kulit)",
+      "specialization_name_en": "Dermatology (Skin)",
+      "sub_specialization_name": "Spesialis Dermatologi Venereologi Estetika",
+      "doctor_seo_key": "dr-anonim-contoh-satu-spdve"
+    },
+    "availability": [
+      {
+        "hospital_id": "hhhh0000-0000-0000-0000-000000000001",
+        "hospital_name": "Siloam Hospitals Kebon Jeruk",
+        "alias": "SHKJ",
+        "is_tele_mysiloam": true,
+        "is_have_schedule": true,
+        "hospital_address": "Jl. Contoh Anonim No. 1, Kebon Jeruk, Jakarta Barat, DKI Jakarta 11530"
+      }
+    ],
+    "schedule": [
+      {
+        "schedule_id": "ssss0000-0000-0000-0000-000000000001",
+        "hospital_id": "hhhh0000-0000-0000-0000-000000000001",
+        "doctor_id": "aaaa1111-0000-0000-0000-000000000001",
+        "day": 1,
+        "from_time": "14:00:00",
+        "to_time": "17:30:00",
+        "from_date": "2018-11-16",
+        "to_date": "9999-12-31",
+        "is_by_appointment": false,
+        "consultation_type_id": "6",
+        "doctor_name": "dr. Anonim Contoh Satu, SpDVE",
+        "hospital_name": "Siloam Hospitals Kebon Jeruk",
+        "hospital_alias": "SHKJ",
+        "consultation_type": "Non BPJS & Teleconsultation",
+        "hospital_address": "Jl. Contoh Anonim No. 1, Kebon Jeruk, Jakarta Barat, DKI Jakarta 11530"
+      },
+      {
+        "schedule_id": "ssss0000-0000-0000-0000-000000000002",
+        "hospital_id": "hhhh0000-0000-0000-0000-000000000001",
+        "doctor_id": "aaaa1111-0000-0000-0000-000000000001",
+        "day": 3,
+        "from_time": "10:00:00",
+        "to_time": "14:00:00",
+        "from_date": "2018-11-16",
+        "to_date": "9999-12-31",
+        "is_by_appointment": false,
+        "consultation_type_id": "6",
+        "doctor_name": "dr. Anonim Contoh Satu, SpDVE",
+        "hospital_name": "Siloam Hospitals Kebon Jeruk",
+        "hospital_alias": "SHKJ",
+        "consultation_type": "Non BPJS & Teleconsultation",
+        "hospital_address": "Jl. Contoh Anonim No. 1, Kebon Jeruk, Jakarta Barat, DKI Jakarta 11530"
+      }
+    ]
+  }
+}

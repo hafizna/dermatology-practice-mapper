@@ -1,0 +1,39 @@
+{
+  "status": "OK",
+  "message": "Success - Get Schedule With Availability",
+  "data": {
+    "doctor": {
+      "name": "dr. Anonim Contoh Dua, Sp.KK",
+      "specialization_name": "Dermatologi (Kulit)",
+      "doctor_seo_key": "dr-anonim-contoh-dua-spkk"
+    },
+    "availability": [
+      {
+        "hospital_id": "hhhh0000-0000-0000-0000-000000000003",
+        "hospital_name": "Siloam Heart Hospital",
+        "alias": "SHH",
+        "is_have_schedule": true,
+        "hospital_address": "Jl. Contoh Anonim No. 3, Cinere, Depok, Jawa Barat 16514"
+      }
+    ],
+    "schedule": [
+      {
+        "schedule_id": "ssss0000-0000-0000-0000-000000000004",
+        "hospital_id": "hhhh0000-0000-0000-0000-000000000003",
+        "doctor_id": "aaaa1111-0000-0000-0000-000000000002",
+        "day": 5,
+        "from_time": "08:00:00",
+        "to_time": "11:00:00",
+        "from_date": "2019-01-01",
+        "to_date": "9999-12-31",
+        "is_by_appointment": false,
+        "consultation_type_id": "6",
+        "doctor_name": "dr. Anonim Contoh Dua, Sp.KK",
+        "hospital_name": "Siloam Heart Hospital",
+        "hospital_alias": "SHH",
+        "consultation_type": "Non BPJS & Teleconsultation",
+        "hospital_address": "Jl. Contoh Anonim No. 3, Cinere, Depok, Jawa Barat 16514"
+      }
+    ]
+  }
+}

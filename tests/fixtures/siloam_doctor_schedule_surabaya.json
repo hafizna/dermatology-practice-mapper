@@ -1,0 +1,39 @@
+{
+  "status": "OK",
+  "message": "Success - Get Schedule With Availability",
+  "data": {
+    "doctor": {
+      "name": "dr. Anonim Contoh Tiga, SpDVE",
+      "specialization_name": "Dermatologi (Kulit)",
+      "doctor_seo_key": "dr-anonim-contoh-tiga-spdve"
+    },
+    "availability": [
+      {
+        "hospital_id": "hhhh0000-0000-0000-0000-000000000002",
+        "hospital_name": "Siloam Hospitals Surabaya",
+        "alias": "SHSB",
+        "is_have_schedule": true,
+        "hospital_address": "Jl. Contoh Anonim No. 2, Surabaya, Jawa Timur 60111"
+      }
+    ],
+    "schedule": [
+      {
+        "schedule_id": "ssss0000-0000-0000-0000-000000000003",
+        "hospital_id": "hhhh0000-0000-0000-0000-000000000002",
+        "doctor_id": "aaaa1111-0000-0000-0000-000000000003",
+        "day": 2,
+        "from_time": "09:00:00",
+        "to_time": "12:00:00",
+        "from_date": "2019-01-01",
+        "to_date": "9999-12-31",
+        "is_by_appointment": false,
+        "consultation_type_id": "6",
+        "doctor_name": "dr. Anonim Contoh Tiga, SpDVE",
+        "hospital_name": "Siloam Hospitals Surabaya",
+        "hospital_alias": "SHSB",
+        "consultation_type": "Non BPJS & Teleconsultation",
+        "hospital_address": "Jl. Contoh Anonim No. 2, Surabaya, Jawa Timur 60111"
+      }
+    ]
+  }
+}

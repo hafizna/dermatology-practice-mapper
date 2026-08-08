@@ -54,76 +54,135 @@ registry_sources:
 # reconnaissance per Agustus 2026 (Appendix A) — WAJIB diverifikasi ulang
 # sebelum dipakai menulis parser karena struktur situs dapat berubah.
 doctor_schedule_sources:
+  # Status akses dicek 2026-08-08 dengan User-Agent jujur (tanpa menyamar
+  # sebagai browser), sesuai spec §3.6. "accessible" = homepage/robots.txt
+  # merespons normal, BUKAN jaminan struktur data dokter/jadwal sudah
+  # direconnaissance penuh (itu baru terjadi saat adapter masing-masing
+  # ditulis di Fase 3).
   eka:
     tier: tier_1
     display_name: "Eka Hospital"
     base_urls:
       - "https://booking.ekahospital.com"
     requires_js: false
+    access_status: "blocked"
     notes: >
-      Pola URL per RS: /hospital/{slug-rs}/{slug-spesialisasi}. Slug
-      spesialisasi tidak konsisten antar cabang (kulit-dan-kelamin vs
-      dermatologi-venerologi) — jangan hardcode, enumerasi dari navigation.
-      Kandidat adapter pilot pertama (Fase 2).
+      BLOCKED (2026-08-08): booking.ekahospital.com mengembalikan HTTP 403
+      dari CloudFront untuk User-Agent jujur MAUPUN Playwright Chromium asli
+      (headless, bukan UA palsu). curl dengan UA browser biasa sempat lolos
+      sekali, tapi itu bot-protection yang tidak konsisten, bukan akses
+      normal — TIDAK dipakai karena akan jadi UA spoofing (dilarang §3.6).
+      Diganti oleh Siloam sebagai pilot adapter Fase 2 (keputusan pengguna).
+      Revisit hanya jika ada jalur akses resmi/izin dari pihak Eka.
   siloam:
     tier: tier_1
     display_name: "Siloam Hospitals"
     base_urls:
       - "https://www.siloamhospitals.com"
-    requires_js: true
+      - "https://mysiloam-api.siloamhospitals.com"
+    requires_js: false
+    access_status: "accessible"
     notes: >
-      Pola URL pernah: /cari-dokter/dermatologi-kulit/rumah-sakit/{slug-rs}.
-      HTTP sederhana pernah kena bot detection — cek endpoint JSON dulu,
-      lalu Playwright normal, jangan evasion. Berhenti & laporkan jika
-      masih diblokir.
+      PILOT ADAPTER FASE 2 (src/scrapers/siloam.py). SPA (Vite), tapi
+      backend API publik di mysiloam-api.siloamhospitals.com merespons
+      JSON langsung ke curl + UA jujur (200 OK), tidak butuh Playwright di
+      runtime (hanya dipakai sekali saat recon untuk menemukan endpoint).
+      Endpoint kunci: GET /api/v2/doctors/withavailability?specialityId=...
+      (listing, speciality_id dermatologi = 44d54965-b740-451c-9fec-
+      a21b6e7544bf) dan GET /api/v2/schedules/withavailability/doctor/{id}
+      (jadwal + hospital_address per dokter). Hasil recon 2026-08-08:
+      119 dermatologis network-wide, 51 di Jabodetabek (address-verified,
+      bukan cuma name-matching -- lihat _is_jabodetabek_hospital).
   mitra_keluarga:
     tier: tier_1
     display_name: "Mitra Keluarga"
-    base_urls: []
+    base_urls:
+      - "https://www.mitrakeluarga.com"
     requires_js: null
-    notes: "Belum direconnaissance — verifikasi struktur situs sebelum adapter ditulis."
+    access_status: "accessible"
+    notes: >
+      Dicek 2026-08-08: robots.txt "Allow: /" penuh, homepage 200 dengan
+      UA jujur. Struktur data dokter/jadwal belum direconnaissance detail
+      (giliran Fase 3).
   hermina:
     tier: tier_1
     display_name: "Hermina"
-    base_urls: []
+    base_urls:
+      - "https://www.herminahospitals.com"
     requires_js: null
-    notes: "Belum direconnaissance."
+    access_status: "accessible"
+    notes: >
+      Dicek 2026-08-08: homepage redirect 308 -> /id, final 200 dengan UA
+      jujur. Struktur data dokter/jadwal belum direconnaissance detail.
   primaya:
     tier: tier_1
     display_name: "Primaya"
-    base_urls: []
+    base_urls:
+      - "https://primayahospital.com"
     requires_js: null
-    notes: "Belum direconnaissance."
+    access_status: "accessible"
+    notes: >
+      Dicek 2026-08-08: homepage 200 dengan UA jujur. Struktur data
+      dokter/jadwal belum direconnaissance detail.
   emc:
     tier: tier_1
     display_name: "EMC"
-    base_urls: []
+    base_urls:
+      - "https://www.emc.id"
     requires_js: null
-    notes: "Belum direconnaissance."
+    access_status: "accessible"
+    notes: >
+      Dicek 2026-08-08: emc.id redirect 301 -> www.emc.id/id, final 200
+      dengan UA jujur. Struktur data dokter/jadwal belum direconnaissance.
   bethsaida:
     tier: tier_1
     display_name: "Bethsaida"
-    base_urls: []
+    base_urls:
+      - "https://www.bethsaidahospitals.com"
     requires_js: null
-    notes: "Belum direconnaissance."
+    access_status: "accessible"
+    notes: >
+      Domain awal (rsbethsaida.com) di config lama TIDAK RESOLVE (salah
+      tebak). Domain benar: bethsaidahospitals.com (dikonfirmasi via
+      pencarian web 2026-08-08), homepage 200 dengan UA jujur (robots.txt
+      404, artinya tidak ada file robots.txt sama sekali -- bukan larangan).
+      Struktur data dokter/jadwal belum direconnaissance detail.
   rs_pondok_indah:
     tier: tier_1
     display_name: "RS Pondok Indah"
-    base_urls: []
+    base_urls:
+      - "https://www.rspondokindah.co.id"
     requires_js: null
-    notes: "Belum direconnaissance."
+    access_status: "accessible"
+    notes: >
+      Dicek 2026-08-08: homepage redirect 307 -> /id, final 200 dengan UA
+      jujur. Struktur data dokter/jadwal belum direconnaissance detail.
   mayapada:
     tier: tier_1
     display_name: "Mayapada"
-    base_urls: []
+    base_urls:
+      - "https://www.mayapadahospital.com"
     requires_js: null
-    notes: "Belum direconnaissance."
+    access_status: "accessible"
+    notes: >
+      Dicek 2026-08-08: robots.txt 200, homepage 200 dengan UA jujur.
+      Struktur data dokter/jadwal belum direconnaissance detail.
   brawijaya:
     tier: tier_1
     display_name: "Brawijaya"
-    base_urls: []
+    base_urls:
+      - "https://brawijayahospital.com"
     requires_js: null
-    notes: "Belum direconnaissance."
+    access_status: "accessible"
+    notes: >
+      Domain awal (rsbrawijaya.co.id) di config lama TIDAK RESOLVE (salah
+      tebak -- itu domain RSAD Brawijaya, institusi berbeda). Domain benar
+      untuk grup RS Brawijaya (preferred group ini): brawijayahospital.com
+      (dikonfirmasi via pencarian web 2026-08-08), homepage 200 dengan UA
+      jujur. Sempat dicatat keliru sebagai "tidak ada layanan dermatologi"
+      (2026-08-08) -- dikoreksi pengguna: Brawijaya memang menyediakan
+      SpKK. Tetap masuk daftar recon detail Fase 3 seperti grup lain.
+      Struktur data dokter/jadwal belum direconnaissance detail.
 
 aggregator_sources:
   alodokter:

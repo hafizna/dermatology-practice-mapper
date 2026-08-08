@@ -1,0 +1,57 @@
+{
+  "status": "OK",
+  "message": "Success",
+  "data": [
+    {
+      "speciality_id": "11111111-1111-1111-1111-111111111111",
+      "speciality_name_en": "Acupuncture",
+      "speciality_name": "Akupunktur",
+      "is_coe": true,
+      "is_sco": true,
+      "speciality_seo_key": "acupuncture",
+      "slug": "acupuncture",
+      "sub_specialities": []
+    },
+    {
+      "speciality_id": "44d54965-b740-451c-9fec-a21b6e7544bf",
+      "speciality_name_en": "Dermatology (Skin)",
+      "speciality_name": "Dermatologi (Kulit)",
+      "is_coe": true,
+      "is_sco": true,
+      "speciality_seo_key": "dermatology--skin-",
+      "slug": "dermatology--skin-",
+      "sub_specialities": [
+        {
+          "speciality_id": "44d54965-b740-451c-9fec-a21b6e7544bf",
+          "specialization_id": "266f7854-4f5e-462e-8267-2ada967ecf51",
+          "specialization_name": "Spesialis Dermatologi Venereologi Estetika",
+          "specialization_name_en": "Dermatologist Venereologist Aesthetician",
+          "specialization_abbreviation": "SpDVE / SpKK",
+          "specialization_abbreviation_govt": "SpDVE / SpKK",
+          "specialization_seo_key": "dermatology--skin--dermatologist-venereologist-aesthetician",
+          "slug": "dermatology--skin--dermatologist-venereologist-aesthetician"
+        },
+        {
+          "speciality_id": "44d54965-b740-451c-9fec-a21b6e7544bf",
+          "specialization_id": "64998811-cf9e-4902-87a4-85d184ffe0bc",
+          "specialization_name": "Subspesialis Dermatologi Anak",
+          "specialization_name_en": "Pediatric Dermatology Subspecialist",
+          "specialization_abbreviation": "SpDVE, Subsp. DA",
+          "specialization_abbreviation_govt": "SpDVE, Subsp. DA",
+          "specialization_seo_key": "dermatology--skin--pediatric-dermatology-subspecialist",
+          "slug": "dermatology--skin--pediatric-dermatology-subspecialist"
+        }
+      ]
+    },
+    {
+      "speciality_id": "22222222-2222-2222-2222-222222222222",
+      "speciality_name_en": "Otorhinolaryngology (ENT)",
+      "speciality_name": "Otorinolaringologi (THTBKL)",
+      "is_coe": false,
+      "is_sco": true,
+      "speciality_seo_key": "ent",
+      "slug": "ent",
+      "sub_specialities": []
+    }
+  ]
+}
