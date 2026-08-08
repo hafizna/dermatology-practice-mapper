@@ -98,17 +98,42 @@ def test_partial_is_colored_only_for_known_doctor_count():
 
 
 def test_legend_matches_metric_direction_and_exact_thirds():
+    # "Derm hrs/wk" (not "Derm") used here since "Derm" now has a fixed
+    # scale (see test_derm_uses_fixed_1_3_4_5_6plus_scale_not_tercile) —
+    # this test is specifically about tercile-based legend formatting.
     bounds = CategoryBoundaries(0, 3, 6, 9)
-    count_legend = format_metric_legend(MAP_METRICS["Derm"], bounds)
-    assert "nilai lebih rendah" in count_legend
-    assert "🟢 ≤ 3" in count_legend
-    assert "🔴 > 6" in count_legend
+    hours_legend = format_metric_legend(MAP_METRICS["Derm hrs/wk"], bounds)
+    assert "nilai lebih rendah" in hours_legend
+    assert "🟢 ≤ 3" in hours_legend
+    assert "🔴 > 6" in hours_legend
 
     opportunity_bounds = CategoryBoundaries(0, 0.3, 0.6, 0.9)
     opportunity_legend = format_metric_legend(MAP_METRICS["Opportunity"], opportunity_bounds)
     assert "nilai lebih tinggi" in opportunity_legend
     assert "🔴 ≤ 0.30" in opportunity_legend
     assert "🟢 > 0.60" in opportunity_legend
+
+
+def test_derm_uses_fixed_1_3_4_5_6plus_scale_not_tercile():
+    # User's own clinical judgment (2026-08-09): tercile made the middle
+    # "oranye" bucket nearly useless for doctor counts (with ~91
+    # hospitals mostly having 1-4 dermatologists, tercile boundaries
+    # landed on "> 3 s.d. 4", matching only an exact count of 4). Fixed
+    # scale: 1-3=hijau, 4-5=oranye, 6+=merah, regardless of what
+    # tercile boundaries would have computed from the live data.
+    spec = MAP_METRICS["Derm"]
+    tercile_bounds_that_should_be_ignored = CategoryBoundaries(0, 100, 200, 300)
+    for count, expected_color in [(1, "green"), (3, "green"), (4, "orange"), (5, "orange"), (6, "red"), (10, "red")]:
+        category = classify_marker(
+            count, data_quality="complete", spec=spec, boundaries=tercile_bounds_that_should_be_ignored
+        )
+        assert category.color == expected_color, f"{count} dokter -> expected {expected_color}, got {category.color}"
+
+    legend = format_metric_legend(spec, tercile_bounds_that_should_be_ignored)
+    assert "Skala tetap" in legend
+    assert "🟢 ≤ 3" in legend
+    assert "🟠 > 3 s.d. 5" in legend
+    assert "🔴 > 5" in legend
 
 
 def test_boundaries_use_distribution_terciles_not_min_max_range():
@@ -123,7 +148,9 @@ def test_boundaries_use_distribution_terciles_not_min_max_range():
 
 
 def test_empty_and_uniform_scales_have_explicit_legends():
-    spec = MAP_METRICS["Derm"]
+    # "Derm hrs/wk" used here (not "Derm", which has a fixed scale and so
+    # never falls into "no values"/"uniform" tercile edge cases).
+    spec = MAP_METRICS["Derm hrs/wk"]
     empty = calculate_category_boundaries([])
     assert not empty.has_values
     assert "tidak ada nilai" in format_metric_legend(spec, empty)

@@ -20,6 +20,18 @@ class MapMetricSpec:
     higher_is_more_opportunity: bool
     allow_partial: bool
     decimals: int
+    # Fixed (non-tercile) category boundaries, used instead of
+    # calculate_category_boundaries() when set. Needed for "Jumlah
+    # dokter": with ~91 hospitals in typical data and 60% of them having
+    # only 1-3 dermatologists, tercile boundaries (which split by ROW
+    # COUNT, not value range) collapsed the middle "oranye" bucket into
+    # a single exact value (e.g. "> 3 s.d. 4" only ever matches a count
+    # of exactly 4) — nearly useless, and the boundaries also reshuffled
+    # every time the underlying data changed. A doctor-count is discrete
+    # and small-ranged enough that a clinically-reasoned fixed scale
+    # (user's own judgment, 2026-08-09: 1-3=hijau, 4-5=oranye, 6+=merah)
+    # is more legible and stable than a distribution-based one.
+    fixed_boundaries: "CategoryBoundaries | None" = None
 
 
 @dataclass(frozen=True)
@@ -37,12 +49,19 @@ class CategoryBoundaries:
     has_values: bool = True
 
 
+# Fixed doctor-count scale (user's own clinical judgment, 2026-08-09):
+# 1-3 dokter = hijau (peluang besar), 4-5 = oranye (sedang), 6+ = merah
+# (peluang kecil). minimum/maximum here are display-only floors/ceilings
+# for the legend text, not used to gate classification.
+_DERM_COUNT_FIXED_BOUNDARIES = CategoryBoundaries(minimum=0, lower=3, upper=5, maximum=999)
+
 MAP_METRICS: dict[str, MapMetricSpec] = {
     "Opportunity": MapMetricSpec(
         "Opportunity", "Skor opportunity", "Opportunity", True, False, 2
     ),
     "Derm": MapMetricSpec(
-        "Derm", "Jumlah dokter", "Derm", False, True, 0
+        "Derm", "Jumlah dokter", "Derm", False, True, 0,
+        fixed_boundaries=_DERM_COUNT_FIXED_BOUNDARIES,
     ),
     "Derm hrs/wk": MapMetricSpec(
         "Derm hrs/wk", "Jam dokter/minggu", "Derm hrs/wk", False, False, 1
@@ -100,7 +119,13 @@ def classify_marker(
 
     Raw-value order is reversed for doctor count and doctor-hours because
     lower internal supply means larger practice opportunity.
+
+    If ``spec.fixed_boundaries`` is set, it overrides the ``boundaries``
+    argument entirely — used for "Jumlah dokter" (see MapMetricSpec
+    docstring for why a fixed scale beats tercile there).
     """
+    boundaries = spec.fixed_boundaries or boundaries
+
     if data_quality == "confirmed_zero":
         # Complete official group coverage establishes that this branch
         # really has no listed dermatologist. That is maximum internal
@@ -138,6 +163,12 @@ def classify_marker(
 
 def format_metric_legend(spec: MapMetricSpec, boundaries: CategoryBoundaries) -> str:
     """Legend whose displayed thresholds exactly match ``classify_marker``."""
+    if spec.fixed_boundaries is not None:
+        boundaries = spec.fixed_boundaries
+        scale_label = "Skala tetap"
+    else:
+        scale_label = "Tercile peta aktif"
+
     direction = "nilai lebih tinggi" if spec.higher_is_more_opportunity else "nilai lebih rendah"
     if not boundaries.has_values:
         return (
@@ -161,7 +192,7 @@ def format_metric_legend(spec: MapMetricSpec, boundaries: CategoryBoundaries) ->
         buckets = f"🔴 {low} · 🟠 {middle} · 🟢 {high}"
     else:
         buckets = f"🟢 {low} · 🟠 {middle} · 🔴 {high}"
-    return f"**{spec.label}:** {direction} = peluang lebih besar. Tercile peta aktif: {buckets}."
+    return f"**{spec.label}:** {direction} = peluang lebih besar. {scale_label}: {buckets}."
 
 
 def _format_value(value: float, decimals: int) -> str:

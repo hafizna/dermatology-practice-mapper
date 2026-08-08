@@ -90,7 +90,14 @@ def test_app_map_legends_match_each_metric_direction():
     for metric_key, direction in expected_directions.items():
         map_selectbox.set_value(metric_key)
         at.run()
-        legends = [str(md.value) for md in at.markdown if "Tercile peta aktif" in str(md.value)]
+        # "Derm" uses a fixed scale ("Skala tetap") rather than
+        # tercile ("Tercile peta aktif") — see MapMetricSpec.fixed_boundaries
+        # docstring in src/map_categories.py.
+        legends = [
+            str(md.value)
+            for md in at.markdown
+            if "Tercile peta aktif" in str(md.value) or "Skala tetap" in str(md.value)
+        ]
         assert len(legends) == 1
         assert MAP_METRICS[metric_key].label in legends[0]
         assert direction in legends[0]
