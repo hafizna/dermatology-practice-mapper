@@ -171,10 +171,36 @@ def test_app_data_quality_tab_metrics_present():
     at = AppTest.from_file(str(_APP_PATH), default_timeout=30)
     at.run()
     assert not at.exception
-    # Data Quality tab renders 3 (top) + 3 (tier) + 2 (data_status) + 4
-    # (dermatologist_count_status) + 3 (parse confidence) = 15 st.metric
-    # calls, plus 1 in the heatmap tab (schedule_completeness) = 16.
-    assert len(at.metric) == 16
+    metric_labels = {metric.label for metric in at.metric}
+    assert {
+        "Total RS master registry",
+        "Total preferred-private",
+        "RS sekitar",
+        "RS unknown",
+        "RS dengan dermatolog",
+        "Dermatolog unik (known)",
+        "Doctor-hours sekitar",
+    }.issubset(metric_labels)
+
+
+def test_app_competitive_pilot_cluster_and_radius_switches_render():
+    at = AppTest.from_file(str(_APP_PATH), default_timeout=30)
+    at.run()
+    assert not at.exception
+
+    cluster_selectbox = next(sb for sb in at.selectbox if sb.label == "Cluster pilot")
+    for cluster_label in ["Bintaro", "BSD", "Kuningan"]:
+        cluster_selectbox.set_value(cluster_label)
+        at.run()
+        assert not at.exception, f"competitive cluster {cluster_label!r} failed"
+        cluster_selectbox = next(sb for sb in at.selectbox if sb.label == "Cluster pilot")
+
+    radius_selectbox = next(sb for sb in at.selectbox if sb.label == "Radius pilot (km)")
+    for radius in [3.0, 5.0, 10.0]:
+        radius_selectbox.set_value(radius)
+        at.run()
+        assert not at.exception, f"competitive radius {radius!r} failed"
+        radius_selectbox = next(sb for sb in at.selectbox if sb.label == "Radius pilot (km)")
 
 
 def test_app_no_matching_filter_shows_empty_state_not_crash():

@@ -108,6 +108,37 @@ class ScoringConfig(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# config/competitive_pilot.yaml
+# ---------------------------------------------------------------------------
+
+
+class CompetitivePilotCluster(BaseModel):
+    label: str
+    anchor_hospital: str
+
+
+class CompetitivePilotConfig(BaseModel):
+    radii_km: list[float]
+    default_radius_km: float
+    high_confidence_min_coverage: float = 0.80
+    medium_confidence_min_coverage: float = 0.50
+    excluded_name_fragments: list[str] = Field(default_factory=list)
+    clusters: dict[str, CompetitivePilotCluster]
+
+    def model_post_init(self, __context: Any) -> None:
+        if self.default_radius_km not in self.radii_km:
+            raise ValueError("default_radius_km must be one of radii_km")
+        if not 0 <= self.medium_confidence_min_coverage <= self.high_confidence_min_coverage <= 1:
+            raise ValueError(
+                "competitive-pilot confidence thresholds must satisfy 0 <= medium <= high <= 1"
+            )
+
+    @classmethod
+    def load(cls, path: Path | None = None) -> "CompetitivePilotConfig":
+        return cls.model_validate(_load_yaml(path or CONFIG_DIR / "competitive_pilot.yaml"))
+
+
+# ---------------------------------------------------------------------------
 # config/sources.yaml
 # ---------------------------------------------------------------------------
 
@@ -202,6 +233,11 @@ def get_prime_time_config() -> PrimeTimeConfig:
 @lru_cache(maxsize=1)
 def get_scoring_config() -> ScoringConfig:
     return ScoringConfig.load()
+
+
+@lru_cache(maxsize=1)
+def get_competitive_pilot_config() -> CompetitivePilotConfig:
+    return CompetitivePilotConfig.load()
 
 
 @lru_cache(maxsize=1)

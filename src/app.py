@@ -2,10 +2,10 @@
 
 V1 scope only: universe filter, ranking table, schedule heatmap, map,
 data-quality tab. Deliberately NO population/affluence/office-density
-layer (that's V2's Market Attractiveness, out of scope here) and NO
-competitive-context panel (V1.5, out of scope here) — spec explicitly
-states "Dashboard V1 harus sudah berguna tanpa population/affluence
-layer."
+layer (that's V2's Market Attractiveness, out of scope here). A
+hospital-only competitive-context pilot for Bintaro, BSD, and Kuningan
+is included as the first V1.5 slice; it stays separate from the V1
+opportunity score.
 
 Data freshness: this page reads whatever is currently in
 data/processed/derm_mapper.sqlite. It does not re-scrape or recompute
@@ -24,8 +24,10 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 from streamlit_folium import st_folium
 
+from src.config import get_competitive_pilot_config
 from src.db import get_engine
 from src.deploy_data import ensure_database_present
+from src.enrich.competition import compute_competitive_pilot
 from src.map_categories import (
     MAP_METRICS,
     calculate_category_boundaries,
@@ -246,8 +248,14 @@ if min_completeness > 0:
 
 st.sidebar.caption(f"{len(filtered)} dari {len(df)} RS di universe '{universe}' cocok filter.")
 
-tab_ranking, tab_heatmap, tab_map, tab_quality = st.tabs(
-    ["📊 Ranking", "🗓️ Heatmap Jadwal", "🗺️ Peta", "🔍 Data Quality"]
+tab_ranking, tab_heatmap, tab_map, tab_competitive, tab_quality = st.tabs(
+    [
+        "📊 Ranking",
+        "🗓️ Heatmap Jadwal",
+        "🗺️ Peta",
+        "Competitive Pilot",
+        "🔍 Data Quality",
+    ]
 )
 
 # ---------------------------------------------------------------------
@@ -566,7 +574,182 @@ perlu didiskusikan ulang, bukan salah hitung.
                 popup=folium.Popup(popup_html, max_width=300),
             ).add_to(fmap)
 
-        st_folium(fmap, use_container_width=True, height=550, returned_objects=[])
+        st_folium(
+            fmap,
+            use_container_width=True,
+            height=550,
+            returned_objects=[],
+            key="opportunity_map",
+        )
+
+# ---------------------------------------------------------------------
+# V1.5 hospital-only competitive pilot
+# ---------------------------------------------------------------------
+
+with tab_competitive:
+    st.subheader("Competitive context — pilot rumah sakit")
+    st.caption(
+        "Supply dermatologi RS lain dalam radius garis lurus dari RS anchor. "
+        "Klinik kecantikan, klinik umum, dental, dan fasilitas non-RS tidak "
+        "dimasukkan. Angka supply adalah batas bawah selama masih ada RS unknown."
+    )
+
+    competitive_config = get_competitive_pilot_config()
+    engine = _get_engine()
+    with Session(engine) as session:
+        competitive_results = compute_competitive_pilot(session, competitive_config)
+
+    cluster_key = st.selectbox(
+        "Cluster pilot",
+        options=list(competitive_config.clusters),
+        format_func=lambda key: competitive_config.clusters[key].label,
+    )
+    radius_km = st.selectbox(
+        "Radius pilot (km)",
+        options=competitive_config.radii_km,
+        index=competitive_config.radii_km.index(competitive_config.default_radius_km),
+    )
+    cluster_metrics = competitive_results[cluster_key]
+    selected_metrics = next(
+        row for row in cluster_metrics if row.radius_km == radius_km
+    )
+
+    anchor_derm = (
+        str(selected_metrics.anchor_dermatologists)
+        if selected_metrics.anchor_dermatologists is not None
+        else "Unknown"
+    )
+    anchor_hours = (
+        f"{selected_metrics.anchor_doctor_hours_week:g} jam/minggu"
+        if selected_metrics.anchor_doctor_hours_week is not None
+        else "Unknown"
+    )
+    st.info(
+        f"Anchor: **{selected_metrics.anchor_hospital_name}** — "
+        f"{anchor_derm} dermatolog, {anchor_hours}. "
+        "Supply anchor tidak ikut angka kompetitor di bawah."
+    )
+
+    comparison_rows = [
+        {
+            "Radius": f"{row.radius_km:g} km",
+            "RS registry": row.nearby_hospitals_count,
+            "Status diketahui": row.nearby_known_status_count,
+            "RS unknown": row.nearby_unknown_hospitals_count,
+            "RS dengan dermatolog": row.nearby_derm_hospitals_count,
+            "Dermatolog unik (known)": row.nearby_dermatologists_unique,
+            "Doctor-hours known": row.nearby_derm_doctor_hours_week,
+            "Coverage status": (
+                f"{row.known_status_coverage_ratio:.0%}"
+                if row.known_status_coverage_ratio is not None
+                else "Tidak ada RS"
+            ),
+            "Confidence": row.data_quality.value,
+        }
+        for row in cluster_metrics
+    ]
+    st.dataframe(pd.DataFrame(comparison_rows), hide_index=True, use_container_width=True)
+
+    metric_columns = st.columns(6)
+    metric_columns[0].metric("RS sekitar", selected_metrics.nearby_hospitals_count)
+    metric_columns[1].metric("Status diketahui", selected_metrics.nearby_known_status_count)
+    metric_columns[2].metric("RS unknown", selected_metrics.nearby_unknown_hospitals_count)
+    metric_columns[3].metric(
+        "RS dengan dermatolog", selected_metrics.nearby_derm_hospitals_count
+    )
+    metric_columns[4].metric(
+        "Dermatolog unik (known)", selected_metrics.nearby_dermatologists_unique
+    )
+    metric_columns[5].metric(
+        "Doctor-hours sekitar", f"{selected_metrics.nearby_derm_doctor_hours_week:g}"
+    )
+
+    if selected_metrics.nearby_unknown_hospitals_count:
+        st.warning(
+            f"{selected_metrics.nearby_unknown_hospitals_count} RS dalam radius ini "
+            "masih unknown. Jangan menafsirkan angka dermatolog/doctor-hours sebagai "
+            "total pasar; ini baru supply yang berhasil diketahui."
+        )
+
+    competitive_map = folium.Map(
+        location=[selected_metrics.anchor_lat, selected_metrics.anchor_lon],
+        zoom_start=12,
+        tiles="cartodbpositron",
+    )
+    folium.Circle(
+        location=[selected_metrics.anchor_lat, selected_metrics.anchor_lon],
+        radius=selected_metrics.radius_km * 1000,
+        color="#2563eb",
+        weight=2,
+        fill=False,
+        tooltip=f"Radius {selected_metrics.radius_km:g} km",
+    ).add_to(competitive_map)
+    folium.Marker(
+        location=[selected_metrics.anchor_lat, selected_metrics.anchor_lon],
+        tooltip=f"Anchor: {selected_metrics.anchor_hospital_name}",
+        popup=selected_metrics.anchor_hospital_name,
+        icon=folium.Icon(color="blue", icon="plus-sign"),
+    ).add_to(competitive_map)
+
+    status_colors = {
+        DermatologistCountStatus.HAS_DOCTORS.value: "purple",
+        DermatologistCountStatus.CONFIRMED_ZERO.value: "gray",
+        DermatologistCountStatus.UNKNOWN.value: "gray",
+    }
+    for hospital in selected_metrics.hospitals:
+        derm_value = (
+            hospital.n_dermatologists
+            if hospital.n_dermatologists is not None
+            else "Tidak ada data"
+        )
+        hours_value = (
+            f"{hospital.doctor_hours_week:g}"
+            if hospital.doctor_hours_week is not None
+            else "Tidak ada data"
+        )
+        popup = (
+            f"<b>{hospital.hospital_name}</b><br>"
+            f"Jarak: {hospital.distance_km:g} km<br>"
+            f"Status: {hospital.dermatologist_status}<br>"
+            f"Dermatolog: {derm_value}<br>"
+            f"Doctor-hours/minggu: {hours_value}"
+        )
+        folium.CircleMarker(
+            location=[hospital.lat, hospital.lon],
+            radius=6,
+            color=status_colors.get(hospital.dermatologist_status, "gray"),
+            fill=True,
+            fill_opacity=0.8,
+            tooltip=hospital.hospital_name,
+            popup=folium.Popup(popup, max_width=300),
+        ).add_to(competitive_map)
+
+    st_folium(
+        competitive_map,
+        use_container_width=True,
+        height=520,
+        returned_objects=[],
+        key=f"competitive_{cluster_key}_{radius_km:g}",
+    )
+
+    detail_rows = [
+        {
+            "Hospital": hospital.hospital_name,
+            "Jarak (km)": hospital.distance_km,
+            "Group": hospital.group or "(belum terpetakan)",
+            "Status dermatolog": hospital.dermatologist_status,
+            "Dermatolog": hospital.n_dermatologists,
+            "Doctor-hours/minggu": hospital.doctor_hours_week,
+            "Schedule completeness": hospital.schedule_completeness,
+        }
+        for hospital in selected_metrics.hospitals
+    ]
+    st.dataframe(pd.DataFrame(detail_rows), hide_index=True, use_container_width=True)
+    st.caption(
+        "Jumlah RS adalah baris registry rumah sakit dalam radius, bukan jumlah "
+        "brand/grup unik. Duplikat registry yang belum terverifikasi mungkin masih "
+        "ada dan sengaja tidak digabung otomatis."
+    )
 
 # ---------------------------------------------------------------------
 # 8.5 Data Quality tab

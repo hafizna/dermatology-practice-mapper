@@ -10,6 +10,7 @@ from sqlalchemy import inspect
 
 from src.cli import cli
 from src.config import (
+    CompetitivePilotConfig,
     HospitalPreferencesConfig,
     PrimeTimeConfig,
     ScoringConfig,
@@ -60,6 +61,13 @@ def test_scoring_config_weights_sum_to_one() -> None:
         + cfg.core_opportunity.weekend_gap
     )
     assert abs(total - 1.0) < 1e-6
+
+
+def test_competitive_pilot_config_loads_three_clusters() -> None:
+    cfg = CompetitivePilotConfig.load()
+    assert cfg.radii_km == [3.0, 5.0, 10.0]
+    assert cfg.default_radius_km == 5.0
+    assert set(cfg.clusters) == {"bintaro", "bsd", "kuningan"}
 
 
 def test_sources_config_forbids_evasion_by_default() -> None:

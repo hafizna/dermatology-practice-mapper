@@ -1,0 +1,34 @@
+# V1.5 pilot: nearby hospital supply around three representative anchors.
+# Radii are straight-line (haversine), not driving time.
+radii_km: [3.0, 5.0, 10.0]
+default_radius_km: 5.0
+
+# Confidence describes how many nearby hospital rows have a known
+# dermatologist status. Supply remains a lower bound while unknown rows exist.
+high_confidence_min_coverage: 0.80
+medium_confidence_min_coverage: 0.50
+
+# The master registry originates from amenity=hospital but contains a few
+# obviously clinic/dental-labelled rows. This pilot is hospital-only.
+excluded_name_fragments:
+  - clinic
+  - klinik
+  - puskesmas
+  - dental
+  - dentistry
+  - apotek
+  - laboratory
+  - laboratorium
+  - specialist center
+  - physiotherapy
+
+clusters:
+  bintaro:
+    label: Bintaro
+    anchor_hospital: RS Premier Bintaro
+  bsd:
+    label: BSD
+    anchor_hospital: Eka Hospital BSD
+  kuningan:
+    label: Kuningan
+    anchor_hospital: Rumah Sakit Mayapada Kuningan
