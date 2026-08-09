@@ -139,15 +139,10 @@ def test_app_ranking_table_has_expected_columns():
     assert expected_cols.issubset(set(ranking_df.columns))
 
 
-def test_app_ranking_table_shows_no_data_text_not_none_and_renders_without_arrow_error():
-    # Regression guard for a real bug (2026-08-09): filling NaN with the
-    # string "Tidak ada data" while leaving present values as raw floats
-    # produced a mixed float+str column, which st.dataframe()'s pyarrow
-    # backend rejects with ArrowInvalid at render time (not just a
-    # cosmetic issue -- AppTest.exception stayed empty because Streamlit
-    # catches the render error internally, but the table silently failed
-    # to display). Every displayed numeric column must be fully string
-    # after formatting, with "Tidak ada data" (not "None"/NaN) for gaps.
+def test_app_ranking_table_keeps_numeric_types_for_correct_sorting():
+    # The underlying values must stay numeric/NaN. Mixed float+text raises
+    # ArrowInvalid, while converting all values to text makes interactive
+    # sorting place 10 beside 1 instead of after 9.
     at = AppTest.from_file(str(_APP_PATH), default_timeout=30)
     at.run()
     assert not at.exception
@@ -155,16 +150,13 @@ def test_app_ranking_table_shows_no_data_text_not_none_and_renders_without_arrow
 
     numeric_display_cols = ["Derm", "Sessions/wk", "Derm hrs/wk", "Gap jam ramai", "Sat/weekend gap", "Opportunity"]
     for col in numeric_display_cols:
-        # pandas may report this as plain `object` or (newer versions)
-        # its dedicated StringDtype — either is fine, both mean "fully
-        # string, no leftover float values mixed in" which is what
-        # actually matters for pyarrow not to raise ArrowInvalid.
-        assert pd.api.types.is_string_dtype(ranking_df[col]), f"{col} should be fully string, not mixed/float"
-        assert not (ranking_df[col] == "None").any(), f"{col} leaked a literal 'None' string"
+        assert pd.api.types.is_numeric_dtype(ranking_df[col]), (
+            f"{col} must remain numeric so Streamlit sorts 10 after 9"
+        )
 
     rows_with_gap = ranking_df[ranking_df["Kenapa Opportunity kosong?"] != ""]
     if not rows_with_gap.empty:
-        assert (rows_with_gap["Opportunity"] == "Tidak ada data").all()
+        assert rows_with_gap["Opportunity"].isna().all()
 
 
 def test_app_data_quality_tab_metrics_present():

@@ -316,29 +316,19 @@ hilang/tidak terbaca.
         by="Opportunity", ascending=False, na_position="last"
     )
 
-    # Kosong (NaN) tampil sebagai "Tidak ada data", bukan "None" bawaan
-    # pandas -- user feedback 2026-08-09: "None" gampang disalahartikan
-    # sebagai angka nol (khususnya di kolom seperti Sessions/wk atau Sat/
-    # weekend gap yang juga punya nilai 0 asli/valid di baris lain).
-    # Dilakukan di dataframe TAMPILAN terpisah (bukan table_df yang
-    # dipakai export CSV) supaya CSV tetap punya sel kosong yang benar
-    # secara semantik untuk diolah lebih lanjut, bukan string tampilan.
-    #
-    # PENTING: seluruh kolom harus jadi string (bukan campuran angka+
-    # string) -- st.dataframe() memakai pyarrow di baliknya, yang gagal
-    # keras (ArrowInvalid, bukan cuma render jelek) kalau satu kolom
-    # berisi float DAN str sekaligus. Makanya nilai yang ADA juga
-    # diformat manual jadi string, bukan dibiarkan sebagai float mentah.
-    _no_data = "Tidak ada data"
+    # Pertahankan dtype NUMERIC di data yang dikirim ke Streamlit supaya
+    # sorting interaktif benar secara numerik (1, 2, ..., 10), bukan
+    # leksikografis (1, 10, 2). Teks "Tidak ada data" hanya formatter
+    # visual via Styler; nilai dasarnya tetap NaN. Ini sekaligus menghindari
+    # ArrowInvalid karena tidak ada campuran float+string dalam satu kolom.
     _decimals_by_col = {
         "Derm": 0, "Sessions/wk": 0, "Derm hrs/wk": 1,
         "Gap jam ramai": 4, "Sat/weekend gap": 4, "Opportunity": 4,
     }
-    display_df = table_df.copy()
-    for col, decimals in _decimals_by_col.items():
-        display_df[col] = display_df[col].apply(
-            lambda v, d=decimals: _no_data if pd.isna(v) else f"{v:.{d}f}"
-        )
+    display_df = table_df.style.format(
+        {col: f"{{:.{decimals}f}}" for col, decimals in _decimals_by_col.items()},
+        na_rep="Tidak ada data",
+    )
 
     st.dataframe(display_df, use_container_width=True, height=500, hide_index=True)
 
