@@ -79,10 +79,17 @@ plugin's admin-ajax.php action, found by the user):
 
 ⚠️ NONCE CAVEAT: DERMATOLOGY_WPNONCE below is a value captured during
 recon and is NOT guaranteed to stay valid indefinitely. If schedule
-fetches start failing, re-extract a fresh nonce from the search page
-(look for `_wpnonce` in the inline `ph_doctor` JS config) rather than
-hardcoding a new one blindly — ideally this should become a small
-"refresh nonce via one GET request" step in a future revision.
+fetches start failing (HTTP 403 on ph_doctor_get_doctor), re-extract a
+fresh nonce from https://primayahospital.com/cari-jadwal-dokter/
+rather than hardcoding a new one blindly — ideally this should become
+a small "refresh nonce via one GET request" step in a future revision.
+Re-verified 2026-08-31: the site's inline config script id is now
+`module-doctor-js-extra` (`var ph_module_doctor = {...}`, previously
+assumed to be `ph_doctor`), and it exposes THREE separate nonces
+(`_wpnonce`, `doctor_nonce`, `profile_nonce`) — only `doctor_nonce`
+works for the `ph_doctor_get_doctor` ajax action (confirmed by testing
+all three against a real post_id; the other two 403). Look for
+`doctor_nonce` specifically, not the first `_wpnonce`-like value found.
 
 Re-verify this structure before relying on it long-term (Appendix A
 caveat — site behavior can change without notice).
@@ -100,8 +107,10 @@ log = get_logger(__name__)
 AJAX_URL = "https://primayahospital.com/wp-admin/admin-ajax.php"
 DERMATOLOGY_TERM_ID = "649"  # "Kulit dan Kelamin" taxonomy term id, found by user via cari-jadwal-dokter URL
 
-# Captured during recon 2026-08-08 — see NONCE CAVEAT in module docstring.
-DERMATOLOGY_WPNONCE = "d07abe4738"
+# Re-captured 2026-08-31 (the 2026-08-08 value started 403'ing — WordPress
+# nonces expire after ~24h, this needed a fresh extraction) — see NONCE
+# CAVEAT in module docstring for where/how to re-extract this.
+DERMATOLOGY_WPNONCE = "e996cca032"
 
 # Max not_in[pagepost][] entries sent per listing call. Empirically, 25
 # entries worked and 28 broke the query (see _fetch_dermatology_listing
@@ -121,6 +130,8 @@ _BASE_OPTIONS = (
 # Jabodetabek location fragments matched against the doctor-card's
 # location text (e.g. "Bekasi", "Tangerang", "Jakarta Barat"). Primaya's
 # location field is a short city/area name, not a full branch name.
+# "karawang" included per user decision 2026-08-31 (dashboard review) —
+# previously excluded as "historically debated", now treated as in-scope.
 _JABODETABEK_LOCATION_HINTS = [
     "jakarta",
     "bekasi",
@@ -128,11 +139,11 @@ _JABODETABEK_LOCATION_HINTS = [
     "bogor",
     "depok",
     "cikarang",
+    "karawang",
 ]
 
 _KNOWN_NON_JABODETABEK_LOCATIONS = [
     "makassar",
-    "karawang",  # historically debated but not part of the strict Jabodetabek definition used in this project
     "palangkaraya",
     "sorowako",
     "sukabumi",
