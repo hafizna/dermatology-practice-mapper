@@ -291,15 +291,38 @@ doctor_schedule_sources:
     display_name: "Sentra Medika Hospital Group"
     base_urls:
       - "https://sentramedikahospitals.com"
-    requires_js: true
-    access_status: "blocked"
+      - "https://admin.sentramedikahospitals.com"
+    requires_js: false
+    access_status: "accessible"
     notes: >
-      Dicek 2026-08-09: halaman /doctors boleh diakses tetapi hanya merender
-      shell awal tanpa data dokter. robots.txt melarang /api/, /profile/, dan
-      /_next/ sehingga endpoint/filter dinamis DVE serta Kulit dan Kelamin
-      tidak boleh dipakai oleh scraper. Cabang registry yang terverifikasi
-      tetap masuk preferred group sebagai unknown; tidak dibuat adapter yang
-      melanggar robots atau mengubah unknown menjadi zero.
+      RE-VERIFIKASI 2026-08-31 (memperbarui catatan "blocked" 2026-08-09 di
+      atas, bukan menghapusnya): benar bahwa sentramedikahospitals.com/
+      robots.txt melarang /api/, dan halaman /doctors di domain itu memang
+      cuma shell kosong (dikonfirmasi ulang lewat _rsc_extract: hanya
+      metadata halaman yang ter-embed server-side, tidak ada data dokter).
+      TAPI Playwright network capture pada 2026-08-31 menemukan bahwa data
+      dokter sesungguhnya di-fetch dari SUBDOMAIN TERPISAH,
+      admin.sentramedikahospitals.com, yang punya robots.txt SENDIRI dan
+      sepenuhnya permisif ("User-agent: *" / "Disallow:" kosong) -- catatan
+      2026-08-09 kemungkinan belum sampai melakukan network capture dan
+      hanya mengecek robots.txt domain utama. Adapter (src/scrapers/
+      sentra_medika.py) HANYA memanggil host admin.* ini, tidak pernah
+      menyentuh sentramedikahospitals.com/api/. Endpoint kunci: GET
+      /api/v1/public/specializations (dua specialization_id, 60 dan 66,
+      sama-sama dermatologi/venereologi -- lihat
+      discover_dermatology_specialization_ids()), GET /api/v1/public/
+      doctors?specialization_ids[]=<id>&page=&per_page= (listing, param
+      HARUS bentuk array-bracket -- varian lain seperti specialization_id
+      singular/specializations/filter[specialization_id] semuanya
+      diabaikan diam-diam oleh server, dikonfirmasi dengan membandingkan
+      total count), dan GET /api/v1/public/doctors/{slug}/schedules
+      (jadwal terstruktur JSON penuh, day name + shift start/end/date, tidak
+      perlu parsing HTML sama sekali). Hasil recon: 6 cabang total, 4
+      Jabodetabek (Cibinong, Cisalak, Harapan Bunda Hospital di Jakarta
+      Timur/Ciracas, Cikarang), 2 bukan (Gempol -- Cirebon, Minahasa Utara).
+      Sentra Medika Hospital Cikarang tidak ada di OSM sama sekali --
+      ditambahkan manual ke config/manual_hospitals.csv dengan koordinat
+      dari API resmi ini.
 
 aggregator_sources:
   alodokter:

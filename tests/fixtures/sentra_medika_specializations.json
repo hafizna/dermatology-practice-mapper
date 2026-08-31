@@ -1,0 +1,9 @@
+{
+  "status": "success",
+  "message": "Active specializations retrieved.",
+  "data": [
+    {"id": 1, "name": "Spesialis Anak", "slug": "spesialis-anak"},
+    {"id": 60, "name": "Spesialis Dermatologi, Venereologi, dan Estetika", "slug": "spesialis-dermatologi-venereologi-dan-estetika"},
+    {"id": 66, "name": "Spesialis Dermatologi, Venereologi, dan Estetika (Kulit dan Kelamin)", "slug": "spesialis-dermatologi-venereologi-dan-estetika-kulit-dan-kelamin"}
+  ]
+}

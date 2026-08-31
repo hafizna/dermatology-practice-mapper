@@ -40,6 +40,7 @@ from src.scrapers.radjak import RadjakScraper
 from src.scrapers.rs_pondok_indah import RsPondokIndahScraper
 from src.scrapers.rs_premier import RsPremierScraper
 from src.scrapers.sari_asih import SariAsihScraper
+from src.scrapers.sentra_medika import SentraMedikaScraper
 from src.scrapers.siloam import SiloamScraper
 
 # (source key, adapter, preferred_rank_group as stored in Hospital rows)
@@ -57,6 +58,7 @@ NETWORK_SOURCES = [
     ("radjak", RadjakScraper, "Radjak Hospital"),
     ("sari_asih", SariAsihScraper, "Sari Asih"),
     ("rs_premier", RsPremierScraper, "RS Premier"),
+    ("sentra_medika", SentraMedikaScraper, "Sentra Medika Hospital Group"),
 ]
 
 

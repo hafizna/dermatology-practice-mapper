@@ -512,3 +512,129 @@ def test_missing_day_field_is_low_confidence_not_dropped():
     assert len(slots) == 1
     assert slots[0].day_of_week is None
     assert slots[0].parse_confidence == "low"
+
+
+# --- sentra_medika --------------------------------------------------------
+
+
+def _sentra_medika_entry(*, hospital_name: str, schedules: list[dict]) -> dict:
+    return {
+        "raw_schedule": {
+            "data": [
+                {
+                    "polyclinic_id": 10,
+                    "polyclinic_name": "POLIKLINIK KULIT DAN KELAMIN",
+                    "hospitals": [
+                        {
+                            "hospital_id": 1,
+                            "hospital_name": hospital_name,
+                            "schedules": schedules,
+                        }
+                    ],
+                }
+            ]
+        }
+    }
+
+
+def test_sentra_medika_english_day_names_normalized():
+    entries = [
+        _sentra_medika_entry(
+            hospital_name="Sentra Medika Hospital Cibinong",
+            schedules=[
+                {
+                    "day": "friday",
+                    "shifts": [{"start_time": "11:00:00", "end_time": "12:00:00", "date": "2026-09-04"}],
+                }
+            ],
+        )
+    ]
+    slots = parse_schedule_entries(entries, source="sentra_medika")
+    assert len(slots) == 1
+    assert slots[0].day_of_week == 4  # Jumat
+    assert slots[0].start_time == "11:00"
+    assert slots[0].end_time == "12:00"
+    assert slots[0].parse_confidence == "medium"
+
+
+def test_sentra_medika_repeated_weekly_shift_dates_deduplicate_to_one_slot():
+    # Same shape as Mitra Keluarga's bug: the API returns one shift per
+    # upcoming occurrence of a recurring weekly slot (same id, different
+    # `date`) — must collapse to one ScheduleSlot, not be counted per date.
+    entries = [
+        _sentra_medika_entry(
+            hospital_name="Sentra Medika Hospital Cikarang",
+            schedules=[
+                {
+                    "day": "friday",
+                    "shifts": [
+                        {"id": 101, "start_time": "11:00:00", "end_time": "12:00:00", "date": "2026-09-04"},
+                        {"id": 101, "start_time": "11:00:00", "end_time": "12:00:00", "date": "2026-09-11"},
+                        {"id": 101, "start_time": "11:00:00", "end_time": "12:00:00", "date": "2026-09-18"},
+                    ],
+                }
+            ],
+        )
+    ]
+    slots = parse_schedule_entries(entries, source="sentra_medika")
+    assert len(slots) == 1
+    assert slots[0].day_of_week == 4
+    assert slots[0].start_time == "11:00"
+    assert slots[0].end_time == "12:00"
+
+
+def test_sentra_medika_different_shifts_same_day_not_collapsed():
+    entries = [
+        _sentra_medika_entry(
+            hospital_name="Sentra Medika Hospital Cikarang",
+            schedules=[
+                {
+                    "day": "friday",
+                    "shifts": [
+                        {"start_time": "11:00:00", "end_time": "12:00:00", "date": "2026-09-04"},
+                        {"start_time": "12:01:00", "end_time": "13:00:00", "date": "2026-09-04"},
+                    ],
+                }
+            ],
+        )
+    ]
+    slots = parse_schedule_entries(entries, source="sentra_medika")
+    assert len(slots) == 2
+    times = {(s.start_time, s.end_time) for s in slots}
+    assert times == {("11:00", "12:00"), ("12:01", "13:00")}
+
+
+def test_sentra_medika_by_hospital_keeps_branches_separate():
+    # A doctor practicing at two Sentra Medika branches must not have
+    # branch A's shifts attached to branch B's Doctor row.
+    entries = [
+        _sentra_medika_entry(
+            hospital_name="Sentra Medika Hospital Cibinong",
+            schedules=[
+                {"day": "monday", "shifts": [{"start_time": "09:00:00", "end_time": "11:00:00", "date": "2026-09-07"}]}
+            ],
+        ),
+        _sentra_medika_entry(
+            hospital_name="RS HARAPAN BUNDA",
+            schedules=[
+                {"day": "tuesday", "shifts": [{"start_time": "13:00:00", "end_time": "15:00:00", "date": "2026-09-08"}]}
+            ],
+        ),
+    ]
+    by_hospital = parse_schedule_entries_by_hospital(entries, source="sentra_medika")
+    assert set(by_hospital) == {"Sentra Medika Hospital Cibinong", "RS HARAPAN BUNDA"}
+    assert by_hospital["Sentra Medika Hospital Cibinong"][0].day_of_week == 0  # Senin
+    assert by_hospital["RS HARAPAN BUNDA"][0].day_of_week == 1  # Selasa
+
+
+def test_sentra_medika_missing_day_is_low_confidence_not_dropped():
+    entries = [
+        _sentra_medika_entry(
+            hospital_name="Sentra Medika Hospital Cikarang",
+            schedules=[{"day": None, "shifts": [{"start_time": "10:00:00", "end_time": "12:00:00", "date": "2026-09-04"}]}],
+        )
+    ]
+    slots = parse_schedule_entries(entries, source="sentra_medika")
+    assert len(slots) == 1
+    assert slots[0].day_of_week is None
+    assert slots[0].parse_confidence == "low"

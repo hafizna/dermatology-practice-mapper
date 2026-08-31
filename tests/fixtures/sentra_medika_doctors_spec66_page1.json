@@ -1,0 +1,37 @@
+{
+  "status": "success",
+  "message": "Doctors retrieved.",
+  "data": [
+    {
+      "id": 799,
+      "slug": "evy-aryanti",
+      "full_name": "dr. Evy Aryanti, Sp.DVE",
+      "status": "active",
+      "specializations": [
+        {"id": 66, "name": "Spesialis Dermatologi, Venereologi, dan Estetika (Kulit dan Kelamin)"}
+      ],
+      "hospitals": [{"id": 6, "name": "Sentra Medika Hospital Cikarang"}]
+    },
+    {
+      "id": 72,
+      "slug": "lady-cecillia-caraldy-koesoema",
+      "full_name": "dr. Lady Cecillia Caraldy Koesoema, Sp.DV",
+      "status": "active",
+      "specializations": [
+        {"id": 66, "name": "Spesialis Dermatologi, Venereologi, dan Estetika (Kulit dan Kelamin)"}
+      ],
+      "hospitals": [{"id": 1, "name": "Sentra Medika Hospital Cibinong"}]
+    },
+    {
+      "id": 827,
+      "slug": "annisa-marsha-evanti",
+      "full_name": "dr. Annisa Marsha Evanti, M.Kes., Sp. DVE",
+      "status": "active",
+      "specializations": [
+        {"id": 66, "name": "Spesialis Dermatologi, Venereologi, dan Estetika (Kulit dan Kelamin)"}
+      ],
+      "hospitals": [{"id": 3, "name": "Sentra Medika Hospital Gempol"}]
+    }
+  ],
+  "meta": {"pagination": {"current_page": 1, "per_page": 50, "total": 3, "has_more_pages": false}}
+}

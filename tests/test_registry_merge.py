@@ -255,11 +255,12 @@ def test_apply_display_alias_overrides_skips_when_coordinate_does_not_match(in_m
 
 def test_manual_hospital_config_is_complete_and_coordinate_valid():
     records = load_manual_hospitals()
-    assert len(records) == 15
+    assert len(records) == 16
     assert {record.name for record in records} >= {
         "EKA Hospital Depok",
         "Mitra Keluarga Grand Wisata",
         "Siloam Specialist Center Senayan",
+        "Sentra Medika Hospital Cikarang",
     }
 
 
@@ -277,12 +278,13 @@ def test_replace_manual_hospitals_is_idempotent(in_memory_engine):
         "Primaya",
         "Sari Asih",
         "Siloam",
+        "Sentra Medika Hospital Group",
     ]
     with Session(in_memory_engine) as session:
-        assert _replace_manual_hospitals(session, preferred) == 15
-        assert _replace_manual_hospitals(session, preferred) == 15
+        assert _replace_manual_hospitals(session, preferred) == 16
+        assert _replace_manual_hospitals(session, preferred) == 16
         rows = session.query(Hospital).filter(
             Hospital.source_tier == SourceTier.TIER_3_MANUAL
         ).all()
-        assert len(rows) == 15
+        assert len(rows) == 16
         assert all(row.is_preferred_group for row in rows)

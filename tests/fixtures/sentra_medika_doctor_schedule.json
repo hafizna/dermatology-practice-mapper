@@ -1,0 +1,35 @@
+{
+  "data": [
+    {
+      "polyclinic_id": 10,
+      "polyclinic_name": "POLIKLINIK KULIT DAN KELAMIN",
+      "hospitals": [
+        {
+          "hospital_id": 6,
+          "hospital_name": "Sentra Medika Hospital Cikarang",
+          "hospital_address": "Jalan Raya Industri Pasir Gombong, Pasirgombong, Kab Bekasi, Jawa Barat, 17530, Indonesia",
+          "schedules": [
+            {
+              "id": 1,
+              "day": "friday",
+              "quota": 100,
+              "shifts": [
+                {"id": 101, "start_time": "11:00:00", "end_time": "12:00:00", "date": "2026-09-04"},
+                {"id": 101, "start_time": "11:00:00", "end_time": "12:00:00", "date": "2026-09-11"},
+                {"id": 102, "start_time": "12:01:00", "end_time": "13:00:00", "date": "2026-09-04"}
+              ]
+            },
+            {
+              "id": 2,
+              "day": "monday",
+              "quota": 100,
+              "shifts": [
+                {"id": 103, "start_time": "09:00:00", "end_time": "11:00:00", "date": "2026-09-07"}
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

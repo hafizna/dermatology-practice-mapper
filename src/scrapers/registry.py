@@ -28,6 +28,7 @@ from src.scrapers.radjak import RadjakScraper
 from src.scrapers.rs_pondok_indah import RsPondokIndahScraper
 from src.scrapers.rs_premier import RsPremierScraper
 from src.scrapers.sari_asih import SariAsihScraper
+from src.scrapers.sentra_medika import SentraMedikaScraper
 from src.scrapers.siloam import SiloamScraper
 
 log = get_logger(__name__)
@@ -49,6 +50,7 @@ ADAPTERS: dict[str, object] = {
     "radjak": RadjakScraper,
     "sari_asih": SariAsihScraper,
     "rs_premier": RsPremierScraper,
+    "sentra_medika": SentraMedikaScraper,
     "eka": eka_module,  # manual snapshot, not a BaseScraper subclass
 }
 

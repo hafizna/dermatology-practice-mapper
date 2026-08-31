@@ -215,6 +215,23 @@ def _hospital_names_eka(record: RawDoctorRecord) -> list[str]:
     return [part.strip() for part in location.split(",") if part.strip()]
 
 
+def _hospital_names_sentra_medika(record: RawDoctorRecord) -> list[str]:
+    # Prefer the schedule endpoint's own hospital-scoped grouping (its
+    # dict keys ARE the branch names each slot belongs to) — same
+    # reasoning as Primaya/Hermina: a doctor practicing at >1 Sentra
+    # Medika branch must not have branch A's slots attached to branch
+    # B's Doctor row. Falls back to the doctor listing's `hospitals[]`
+    # array (always present, even when GET .../schedules returns no
+    # upcoming shifts) so a doctor with a temporarily-empty schedule
+    # still gets a correct hospital assignment rather than being dropped.
+    by_hospital = parse_schedule_entries_by_hospital(record.raw_schedule_entries, source="sentra_medika") or {}
+    if by_hospital:
+        return list(by_hospital.keys())
+
+    hospitals = record.raw_payload.get("listing_entry", {}).get("hospitals", [])
+    return list(dict.fromkeys(h.get("name", "") for h in hospitals if isinstance(h, dict) and h.get("name")))
+
+
 _HOSPITAL_NAME_EXTRACTORS = {
     "siloam": _hospital_names_siloam,
     "mitra_keluarga": _hospital_names_mitra_keluarga,
@@ -230,6 +247,7 @@ _HOSPITAL_NAME_EXTRACTORS = {
     "radjak": _hospital_names_radjak,
     "primaya": _hospital_names_primaya,
     "eka": _hospital_names_eka,
+    "sentra_medika": _hospital_names_sentra_medika,
 }
 
 

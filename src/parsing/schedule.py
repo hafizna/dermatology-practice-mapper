@@ -570,6 +570,65 @@ def _parse_primaya(entries: list[dict]) -> list[ParsedScheduleSlot]:
     return slots
 
 
+def _sentra_medika_polyclinics_to_slots(polyclinics: list[dict]) -> list[ParsedScheduleSlot]:
+    """Shared core for both the flat and branch-aware Sentra Medika
+    parsers: walk a doctor's `data[].hospitals[].schedules[].shifts[]`
+    tree (already filtered to ONE hospital's `schedules` list by the
+    caller) and emit one slot per distinct (day, start, end).
+
+    Like Mitra Keluarga, the API returns several weeks' worth of concrete
+    future dates for the SAME recurring weekly shift (e.g. Friday
+    11:00-12:00 appears once per upcoming Friday) — deduplicated here on
+    (day, start, end) for the same reason (spec: don't inflate
+    doctor_hours_week by counting one weekly slot N times), keeping the
+    raw_text from the earliest-seen occurrence as representative.
+    """
+    slots: list[ParsedScheduleSlot] = []
+    seen: set[tuple[int | None, str | None, str | None]] = set()
+    for schedule in polyclinics:
+        raw_day = schedule.get("day")
+        day = normalize_day_of_week(raw_day, source="sentra_medika")
+        for shift in schedule.get("shifts", []):
+            start = shift.get("start_time")
+            end = shift.get("end_time")
+            raw_text = f"{raw_day} {start}-{end} (date={shift.get('date')})"
+
+            if day is None:
+                slots.append(ParsedScheduleSlot(None, None, None, raw_text, "low"))
+                continue
+
+            start_hhmm = _hms_to_hhmm(start)
+            end_hhmm = _hms_to_hhmm(end)
+            key = (day, start_hhmm, end_hhmm)
+            if key in seen:
+                continue
+            seen.add(key)
+
+            # Medium, not high: inferred recurring pattern from concrete
+            # upcoming booking dates, not a source-declared recurring
+            # rule (same reasoning as Mitra Keluarga's parser).
+            confidence = "medium" if (start_hhmm and end_hhmm) else "low"
+            slots.append(ParsedScheduleSlot(day, start_hhmm, end_hhmm, raw_text, confidence))
+    return slots
+
+
+def _parse_sentra_medika(entries: list[dict]) -> list[ParsedScheduleSlot]:
+    # entries is [{"raw_schedule": <full GET .../doctors/{slug}/schedules
+    # response body>}] per src/scrapers/sentra_medika.py's
+    # raw_schedule_entries shape: response["data"] is a list of
+    # polyclinic groups, each with hospitals[].schedules[].shifts[]. This
+    # flat form pools every branch's slots together — see
+    # parse_schedule_entries_by_hospital() for the branch-aware variant
+    # (needed because a doctor can practice at >1 Sentra Medika branch).
+    slots: list[ParsedScheduleSlot] = []
+    for wrapper in entries:
+        payload = wrapper.get("raw_schedule", {})
+        for polyclinic in payload.get("data", []):
+            for hospital in polyclinic.get("hospitals", []):
+                slots.extend(_sentra_medika_polyclinics_to_slots(hospital.get("schedules", [])))
+    return slots
+
+
 _SOURCE_PARSERS = {
     "siloam": _parse_siloam,
     "hermina": _parse_hermina,
@@ -585,6 +644,7 @@ _SOURCE_PARSERS = {
     "radjak": _parse_radjak,
     "eka": _parse_eka,
     "primaya": _parse_primaya,
+    "sentra_medika": _parse_sentra_medika,
 }
 
 
@@ -670,11 +730,26 @@ def _parse_eka_by_hospital(entries: list[dict]) -> dict[str, list[ParsedSchedule
     return result
 
 
+def _parse_sentra_medika_by_hospital(entries: list[dict]) -> dict[str, list[ParsedScheduleSlot]]:
+    result: dict[str, list[ParsedScheduleSlot]] = {}
+    for wrapper in entries:
+        payload = wrapper.get("raw_schedule", {})
+        for polyclinic in payload.get("data", []):
+            for hospital in polyclinic.get("hospitals", []):
+                hospital_name = hospital.get("hospital_name", "")
+                if not hospital_name:
+                    continue
+                slots = _sentra_medika_polyclinics_to_slots(hospital.get("schedules", []))
+                result.setdefault(hospital_name, []).extend(slots)
+    return result
+
+
 _SOURCE_PARSERS_BY_HOSPITAL = {
     "hermina": _parse_hermina_by_hospital,
     "rs_pondok_indah": _parse_rspi_by_hospital,
     "primaya": _parse_primaya_by_hospital,
     "eka": _parse_eka_by_hospital,
+    "sentra_medika": _parse_sentra_medika_by_hospital,
 }
 
 

@@ -1,0 +1,31 @@
+{
+  "status": "success",
+  "message": "Doctors retrieved.",
+  "data": [
+    {
+      "id": 799,
+      "slug": "evy-aryanti",
+      "full_name": "dr. Evy Aryanti, Sp.DVE",
+      "status": "active",
+      "specializations": [{"id": 60, "name": "Spesialis Dermatologi, Venereologi, dan Estetika"}],
+      "hospitals": [{"id": 6, "name": "Sentra Medika Hospital Cikarang"}]
+    },
+    {
+      "id": 624,
+      "slug": "lucky-pratama",
+      "full_name": "dr. Lucky Pratama, Sp.DVE",
+      "status": "active",
+      "specializations": [{"id": 60, "name": "Spesialis Dermatologi, Venereologi, dan Estetika"}],
+      "hospitals": [{"id": 6, "name": "Sentra Medika Hospital Cikarang"}]
+    },
+    {
+      "id": 736,
+      "slug": "shienty-gaspersz",
+      "full_name": "dr. Shienty Gaspersz, Sp.KK",
+      "status": "active",
+      "specializations": [{"id": 60, "name": "Spesialis Dermatologi, Venereologi, dan Estetika"}],
+      "hospitals": [{"id": 4, "name": "Sentra Medika Hospital Minahasa Utara"}]
+    }
+  ],
+  "meta": {"pagination": {"current_page": 1, "per_page": 50, "total": 3, "has_more_pages": false}}
+}
