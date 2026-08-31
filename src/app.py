@@ -16,6 +16,18 @@ and `compute-core` (which chains Fase 6 + Fase 7) beforehand to refresh.
 from __future__ import annotations
 
 import datetime as dt
+import sys
+from pathlib import Path
+
+# Streamlit Cloud runs this file directly (streamlit run src/app.py) without
+# necessarily putting the repo root on sys.path first, which breaks the
+# `import src.xxx` absolute imports used throughout this codebase (works
+# fine locally where the CLI/tests always run from the repo root). Insert
+# the repo root explicitly, before any src.* import, so both environments
+# behave the same way.
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
 
 import folium
 import pandas as pd
