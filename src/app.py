@@ -531,7 +531,7 @@ perlu didiskusikan ulang, bukan salah hitung.
         st.info("Tidak ada RS dengan koordinat yang cocok filter saat ini.")
     else:
         center_lat, center_lon = map_df["lat"].mean(), map_df["lon"].mean()
-        fmap = folium.Map(location=[center_lat, center_lon], zoom_start=10, tiles="cartodbpositron")
+        fmap = folium.Map(location=[center_lat, center_lon], zoom_start=10, tiles="OpenStreetMap")
 
         scale_values = [
             float(r["metric_value"])
@@ -676,7 +676,7 @@ with tab_competitive:
     competitive_map = folium.Map(
         location=[selected_metrics.anchor_lat, selected_metrics.anchor_lon],
         zoom_start=12,
-        tiles="cartodbpositron",
+        tiles="OpenStreetMap",
     )
     folium.Circle(
         location=[selected_metrics.anchor_lat, selected_metrics.anchor_lon],
