@@ -16,6 +16,7 @@ and `compute-core` (which chains Fase 6 + Fase 7) beforehand to refresh.
 from __future__ import annotations
 
 import datetime as dt
+from html import escape
 import sys
 from pathlib import Path
 
@@ -47,6 +48,7 @@ from src.map_categories import (
     format_metric_legend,
     metric_value_participates_in_scale,
 )
+from src.map_selection import selected_hospital_from_map
 from src.metrics.coverage import (
     DAY_START_MINUTES,
     N_DAYS,
@@ -175,6 +177,119 @@ def _data_quality_label(row: pd.Series) -> str:
 # ---------------------------------------------------------------------
 # Sidebar — 8.1 Top-level controls
 # ---------------------------------------------------------------------
+
+def _render_hospital_schedule(selected_row: pd.Series) -> None:
+    hospital_id = int(selected_row["hospital_id"])
+    st.markdown(f"**{selected_row['Hospital']}**")
+    st.caption("Jadwal dari data sumber yang tersimpan; konfirmasikan ke RS sebelum menentukan sesi praktik.")
+    if selected_row["Group"] == "Eka Hospital":
+        st.warning("Data Eka berasal dari snapshot manual dan bisa belum mencakup seluruh dokter atau jadwal cabang ini.")
+    engine = _get_engine()
+    with Session(engine) as session:
+        all_slots = session.execute(
+            select(ScheduleSlot).where(ScheduleSlot.hospital_id == hospital_id)
+        ).scalars().all()
+        doctors = session.execute(select(Doctor).where(Doctor.hospital_id == hospital_id)).scalars().all()
+
+    if not all_slots:
+        st.info(
+            "Tidak ada data jadwal untuk RS ini. Ini bisa berarti: (a) sumber/snapshot "
+            "tidak menampilkan jadwal untuk dokter atau cabang tersebut, atau (b) RS "
+            "ini belum pernah discrape sama sekali. Lihat tab Data Quality untuk "
+            "detail per RS."
+        )
+    else:
+        usable = usable_slots_for_hospital(all_slots)
+        n_low_confidence = sum(1 for s in all_slots if s.parse_confidence == ParseConfidence.LOW)
+        cells = build_matrix_cells(usable)
+
+        # Tampilan per-JAM (gabung 2 slot 30 menit jadi 1 kolom) supaya
+        # tabel tidak perlu di-scroll horizontal — data mentah di balik
+        # layar tetap per 30 menit (dipakai untuk metrik Fase 6 seperti
+        # prime_gap_ratio/longest_prime_gap_minutes yang butuh presisi
+        # itu); ini murni pengelompokan untuk tampilan. Nilai tiap jam
+        # diambil dari jumlah dokter TERBANYAK di antara 2 slot 30-menit
+        # penyusunnya (bukan dijumlah), supaya angka tetap berarti
+        # "berapa dokter praktik saat itu", bukan hasil penjumlahan.
+        # 0=kosong, 1=1 dokter, 2=2+ dokter. Slot yang dikecualikan
+        # karena low confidence TIDAK bisa dibedakan per-sel dari
+        # "memang kosong" di grid ini (datanya tidak menyimpan info
+        # sedetail itu per sel) — jumlah slot low-confidence
+        # ditampilkan terpisah sebagai peringatan di bawah tabel.
+        N_HOURS = N_SLOTS_PER_DAY // 2  # 07:00-21:00 dalam 2 slot 30 menit per jam = 14 jam
+        grid = []
+        for day in range(N_DAYS):
+            row_vals = []
+            for hour_idx in range(N_HOURS):
+                slot_a = len(cells.get((day, hour_idx * 2), set()))
+                slot_b = len(cells.get((day, hour_idx * 2 + 1), set()))
+                n_doctors = max(slot_a, slot_b)
+                row_vals.append(min(n_doctors, 2))  # cap display at "2+"
+            grid.append(row_vals)
+
+        time_labels = [
+            f"{(DAY_START_MINUTES + i * 60) // 60:02d}:00"
+            for i in range(N_HOURS)
+        ]
+        heatmap_df = pd.DataFrame(grid, index=_DAY_NAMES_ID, columns=time_labels)
+
+        st.caption(
+            "0 = tidak ada jadwal tercatat · 1 = 1 dokter · 2 = 2+ dokter. Kolom per jam (07:00-21:00), "
+            "diambil dari jumlah dokter terbanyak dalam jam tersebut. Ditampilkan hanya "
+            "jadwal yang berhasil di-parse dengan confidence tinggi/medium."
+        )
+        # Manual 3-color scale (0/1/2+) rather than
+        # Styler.background_gradient — that needs matplotlib, an
+        # extra dependency this project doesn't otherwise require
+        # for a 3-value discrete scale.
+        _HEATMAP_COLORS = {0: "#f5f5f5", 1: "#a1d99b", 2: "#238b45"}
+
+        def _color_cell(value: int) -> str:
+            return f"background-color: {_HEATMAP_COLORS.get(value, '#f5f5f5')}"
+
+        st.dataframe(
+            heatmap_df.style.map(_color_cell),
+            use_container_width=True,
+        )
+
+        if n_low_confidence > 0:
+            st.warning(
+                f"⚠️ {n_low_confidence} dari {len(all_slots)} baris jadwal mentah untuk RS ini "
+                "berstatus LOW confidence (teks jadwal ambigu/tidak terparse) dan TIDAK "
+                "dimasukkan ke heatmap di atas — bukan berarti slot tersebut kosong, "
+                "melainkan tidak diketahui (spec §3.5)."
+            )
+
+        completeness = selected_row["schedule_completeness"]
+        st.metric("Schedule completeness", f"{completeness * 100:.0f}%" if pd.notna(completeness) else "Tidak diketahui")
+        if pd.isna(completeness) or completeness < 1:
+            st.warning("Jadwal belum lengkap. Sel bernilai 0 belum membuktikan jam tersebut kosong untuk seluruh dokter.")
+
+    if doctors:
+        schedule_rows = []
+        for doctor in doctors:
+            doctor_slots = [slot for slot in all_slots if slot.doctor_id == doctor.id]
+            for slot in doctor_slots or [None]:
+                recorded_at = (slot.scraped_at if slot else None) or doctor.scraped_at
+                if recorded_at:
+                    recorded_at = recorded_at.replace(tzinfo=dt.timezone.utc) if recorded_at.tzinfo is None else recorded_at
+                    date_label = recorded_at.astimezone(dt.timezone(dt.timedelta(hours=7))).strftime("%d-%m-%Y")
+                else:
+                    date_label = "Tidak diketahui"
+                day = _DAY_NAMES_ID[slot.day_of_week] if slot and slot.day_of_week is not None and 0 <= slot.day_of_week < 7 else "Belum diketahui"
+                schedule_rows.append({
+                    "Dokter": doctor.clean_name or doctor.raw_name,
+                    "Hari": day,
+                    "Mulai": slot.start_time if slot and slot.start_time else "Belum diketahui",
+                    "Selesai": slot.end_time if slot and slot.end_time else "Belum diketahui",
+                    "Jadwal dari sumber": slot.raw_text if slot else "Jadwal belum tersedia",
+                    "Tanggal pencatatan": date_label,
+                    "Sumber": (slot.source_url if slot else None) or doctor.source_url,
+                })
+        schedule_df = pd.DataFrame(schedule_rows).drop_duplicates()
+        st.markdown("**Rincian jadwal dokter**")
+        st.dataframe(schedule_df, hide_index=True, use_container_width=True,
+                     column_config={"Sumber": st.column_config.LinkColumn("Sumber", display_text="Lihat sumber")})
 
 st.title("🩺 Dermatology Practice Opportunity Mapper — Jabodetabek")
 st.caption(
@@ -374,82 +489,7 @@ with tab_heatmap:
         selected_row = filtered[filtered["Hospital"] == selected_hospital_name].iloc[0]
         hospital_id = int(selected_row["hospital_id"])
 
-        engine = _get_engine()
-        with Session(engine) as session:
-            all_slots = session.execute(
-                select(ScheduleSlot).where(ScheduleSlot.hospital_id == hospital_id)
-            ).scalars().all()
-
-        if not all_slots:
-            st.info(
-                "Tidak ada data jadwal untuk RS ini. Ini bisa berarti: (a) sumber/snapshot "
-                "tidak menampilkan jadwal untuk dokter atau cabang tersebut, atau (b) RS "
-                "ini belum pernah discrape sama sekali. Lihat tab Data Quality untuk "
-                "detail per RS."
-            )
-        else:
-            usable = usable_slots_for_hospital(all_slots)
-            n_low_confidence = sum(1 for s in all_slots if s.parse_confidence == ParseConfidence.LOW)
-            cells = build_matrix_cells(usable)
-
-            # Tampilan per-JAM (gabung 2 slot 30 menit jadi 1 kolom) supaya
-            # tabel tidak perlu di-scroll horizontal — data mentah di balik
-            # layar tetap per 30 menit (dipakai untuk metrik Fase 6 seperti
-            # prime_gap_ratio/longest_prime_gap_minutes yang butuh presisi
-            # itu); ini murni pengelompokan untuk tampilan. Nilai tiap jam
-            # diambil dari jumlah dokter TERBANYAK di antara 2 slot 30-menit
-            # penyusunnya (bukan dijumlah), supaya angka tetap berarti
-            # "berapa dokter praktik saat itu", bukan hasil penjumlahan.
-            # 0=kosong, 1=1 dokter, 2=2+ dokter. Slot yang dikecualikan
-            # karena low confidence TIDAK bisa dibedakan per-sel dari
-            # "memang kosong" di grid ini (datanya tidak menyimpan info
-            # sedetail itu per sel) — jumlah slot low-confidence
-            # ditampilkan terpisah sebagai peringatan di bawah tabel.
-            N_HOURS = N_SLOTS_PER_DAY // 2  # 07:00-21:00 dalam 2 slot 30 menit per jam = 14 jam
-            grid = []
-            for day in range(N_DAYS):
-                row_vals = []
-                for hour_idx in range(N_HOURS):
-                    slot_a = len(cells.get((day, hour_idx * 2), set()))
-                    slot_b = len(cells.get((day, hour_idx * 2 + 1), set()))
-                    n_doctors = max(slot_a, slot_b)
-                    row_vals.append(min(n_doctors, 2))  # cap display at "2+"
-                grid.append(row_vals)
-
-            time_labels = [
-                f"{(DAY_START_MINUTES + i * 60) // 60:02d}:00"
-                for i in range(N_HOURS)
-            ]
-            heatmap_df = pd.DataFrame(grid, index=_DAY_NAMES_ID, columns=time_labels)
-
-            st.caption(
-                "0 = kosong · 1 = 1 dokter · 2 = 2+ dokter. Kolom per jam (07:00-21:00), "
-                "diambil dari jumlah dokter terbanyak dalam jam tersebut. Ditampilkan hanya "
-                "jadwal yang berhasil di-parse dengan confidence tinggi/medium."
-            )
-            # Manual 3-color scale (0/1/2+) rather than
-            # Styler.background_gradient — that needs matplotlib, an
-            # extra dependency this project doesn't otherwise require
-            # for a 3-value discrete scale.
-            _HEATMAP_COLORS = {0: "#f5f5f5", 1: "#a1d99b", 2: "#238b45"}
-
-            def _color_cell(value: int) -> str:
-                return f"background-color: {_HEATMAP_COLORS.get(value, '#f5f5f5')}"
-
-            st.dataframe(
-                heatmap_df.style.map(_color_cell),
-                use_container_width=True,
-            )
-
-            if n_low_confidence > 0:
-                st.warning(
-                    f"⚠️ {n_low_confidence} dari {len(all_slots)} baris jadwal mentah untuk RS ini "
-                    "berstatus LOW confidence (teks jadwal ambigu/tidak terparse) dan TIDAK "
-                    "dimasukkan ke heatmap di atas — bukan berarti slot tersebut kosong, "
-                    "melainkan tidak diketahui (spec §3.5)."
-                )
-
-            st.metric("Schedule completeness", f"{(selected_row['schedule_completeness'] or 0) * 100:.0f}%")
+        _render_hospital_schedule(selected_row)
 
 # ---------------------------------------------------------------------
 # 8.4 Map
@@ -457,6 +497,7 @@ with tab_heatmap:
 
 with tab_map:
     st.subheader("Peta RS")
+    st.caption("Arahkan kursor untuk nama RS. Klik marker untuk membuka heatmap dan rincian jadwal di bawah peta.")
     map_metric = st.selectbox(
         "Metrik warna marker",
         options=list(MAP_METRICS),
@@ -556,8 +597,8 @@ perlu didiskusikan ulang, bukan salah hitung.
 
             _no_data = "Tidak ada data"
             popup_html = (
-                f"<b>{r['Hospital']}</b><br>"
-                f"Group: {r['Group']}<br>"
+                f"<b>{escape(str(r['Hospital']))}</b><br>"
+                f"Group: {escape(str(r['Group']))}<br>"
                 f"Metrik aktif: {metric_spec.label} = "
                 f"{value if pd.notna(value) else _no_data}<br>"
                 f"Kategori marker: {category.label}<br>"
@@ -565,7 +606,8 @@ perlu didiskusikan ulang, bukan salah hitung.
                 f"Derm hrs/wk: {r['Derm hrs/wk'] if pd.notna(r['Derm hrs/wk']) else _no_data}<br>"
                 f"Gap jam ramai: {r['Gap jam ramai'] if pd.notna(r['Gap jam ramai']) else _no_data}<br>"
                 f"Opportunity: {r['Opportunity'] if pd.notna(r['Opportunity']) else _no_data}<br>"
-                f"Data quality: {r['Data quality']}"
+                f"Data quality: {r['Data quality']}<br><br>"
+                "Heatmap dan rincian jadwal RS ini tampil di bawah peta setelah marker diklik."
             )
             folium.CircleMarker(
                 location=[r["lat"], r["lon"]],
@@ -574,15 +616,25 @@ perlu didiskusikan ulang, bukan salah hitung.
                 fill=True,
                 fill_opacity=0.8,
                 popup=folium.Popup(popup_html, max_width=300),
+                tooltip=escape(str(r["Hospital"])),
             ).add_to(fmap)
 
-        st_folium(
+        map_event = st_folium(
             fmap,
             use_container_width=True,
             height=550,
-            returned_objects=[],
+            returned_objects=["last_object_clicked", "last_object_clicked_tooltip"],
             key="opportunity_map",
         )
+        clicked_hospital_id = selected_hospital_from_map(map_event, map_df)
+        if clicked_hospital_id is not None:
+            st.session_state["map_schedule_hospital_id"] = clicked_hospital_id
+        selected_map_rows = map_df[map_df["hospital_id"] == st.session_state.get("map_schedule_hospital_id")]
+        if not selected_map_rows.empty:
+            st.subheader("Jadwal RS yang dipilih di peta")
+            _render_hospital_schedule(selected_map_rows.iloc[0])
+        else:
+            st.info("Klik salah satu marker RS untuk melihat sebaran jadwal dokternya.")
 
 # ---------------------------------------------------------------------
 # V1.5 hospital-only competitive pilot

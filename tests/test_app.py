@@ -19,7 +19,7 @@ from streamlit.testing.v1 import AppTest
 from src.config import DATA_DIR, REPO_ROOT
 from src.db import get_engine
 from src.map_categories import MAP_METRICS
-from src.models import Hospital
+from src.models import Doctor, Hospital, ScheduleSlot
 from sqlalchemy.orm import Session
 
 _DB_PATH = DATA_DIR / "processed" / "derm_mapper.sqlite"
@@ -202,3 +202,43 @@ def test_app_no_matching_filter_shows_empty_state_not_crash():
     min_derm_input.set_value(9999)  # no hospital has this many doctors
     at.run()
     assert not at.exception
+
+
+def test_map_click_opens_exact_hospital_schedule_and_filter_hides_it(monkeypatch):
+    import streamlit_folium
+
+    with Session(get_engine()) as session:
+        hospitals = (session.query(Hospital).join(ScheduleSlot, ScheduleSlot.hospital_id == Hospital.id)
+                     .filter(Hospital.is_preferred_group.is_(True), Hospital.duplicate_of_hospital_id.is_(None),
+                             Hospital.lat.is_not(None), Hospital.lon.is_not(None)).distinct().limit(2).all())
+        if len(hospitals) < 2:
+            pytest.skip("Need two mapped hospitals with schedules")
+        expected_names = {hospital.id: {doctor.clean_name or doctor.raw_name for doctor in
+                          session.query(Doctor).filter(Doctor.hospital_id == hospital.id)} for hospital in hospitals}
+
+    event = {}
+    calls = []
+
+    def fake_map(fig, **kwargs):
+        if kwargs.get("key") == "opportunity_map":
+            calls.append(kwargs)
+            return event.copy()
+        return {}
+
+    monkeypatch.setattr(streamlit_folium, "st_folium", fake_map)
+    at = AppTest.from_file(str(_APP_PATH), default_timeout=30)
+    for hospital in hospitals:
+        event.update(last_object_clicked={"lat": hospital.lat, "lng": hospital.lon},
+                     last_object_clicked_tooltip=hospital.display_alias or hospital.name)
+        at.run()
+        assert not at.exception
+        assert at.session_state["map_schedule_hospital_id"] == hospital.id
+        details = [frame.value for frame in at.dataframe if "Dokter" in frame.value.columns]
+        assert set(details[-1]["Dokter"]) == expected_names[hospital.id]
+        assert {"Hari", "Mulai", "Selesai", "Sumber", "Tanggal pencatatan"}.issubset(details[-1].columns)
+        assert any(heading.value == "Jadwal RS yang dipilih di peta" for heading in at.subheader)
+    assert "last_object_clicked_tooltip" in calls[-1]["returned_objects"]
+    at.number_input[0].set_value(9999)
+    at.run()
+    assert not at.exception
+    assert not any(heading.value == "Jadwal RS yang dipilih di peta" for heading in at.subheader)
