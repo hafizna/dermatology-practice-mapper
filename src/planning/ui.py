@@ -1,4 +1,4 @@
-﻿"""Streamlit-native weekly planner. Network work happens only on explicit actions."""
+"""Streamlit-native weekly planner. Network work happens only on explicit actions."""
 from __future__ import annotations
 
 from dataclasses import asdict
@@ -18,7 +18,7 @@ from src.models import Hospital, HospitalPracticeMetrics, ScheduleSlot
 from src.metrics.coverage import usable_slots_for_hospital
 from src.planning.core import (DAYS, WIB, Constraints, Place, School, Slot, Weights,
                                clock, minute, optimize)
-from src.planning.services import RoutingError, TomTomHistoricalRouter, discover_schools
+from src.planning.services import RoutingError, TomTomHistoricalRouter, discover_schools, normalize_api_key
 
 SLOT_COLUMNS = ['RS', 'Hari', 'Mulai', 'Selesai', 'Status', 'Kunci']
 SCHOOL_COLUMNS = ['Pilih', 'Nama', 'Latitude', 'Longitude', 'Jenjang', 'Kurikulum',
@@ -107,20 +107,38 @@ def render_planner(engine):
     with st.expander('Sumber waktu tempuh', expanded=not bool(_secret())):
         st.write('Mobil pribadi · pola historis menurut hari/jam · TomTom Routing. Perkiraan ini tidak menjamin kondisi lalu lintas pada hari perjalanan.')
         entered_key = st.text_input('TomTom API key (opsional jika sudah dikonfigurasi)', type='password', key='planner_key')
-        api_key = entered_key.strip() or _secret()
+        api_key = normalize_api_key(entered_key) or normalize_api_key(_secret())
+        key_id = hashlib.sha256(api_key.encode()).hexdigest()[:10] if api_key else ''
         if api_key:
-            st.caption('Key tersedia. Koneksi dan kuota diperiksa ketika pencarian/perhitungan dijalankan.')
+            st.caption(f'ID key: {key_id}. Key sudah diisi; autentikasi belum diverifikasi sampai koneksi berhasil.')
         else:
             st.info('Pilihan dan pembobotan bisa disiapkan sekarang. Perhitungan historis membutuhkan TOMTOM_API_KEY di Streamlit Secrets atau key pada kolom ini.')
+        if st.button('Uji koneksi TomTom', disabled=not bool(api_key)):
+            router = None
+            try:
+                router = TomTomHistoricalRouter(api_key, max_calls=1)
+                router.geocode('Jakarta Indonesia')
+                st.session_state['planner_verified_key'] = key_id
+                st.success('Autentikasi dan akses Geocoding TomTom berhasil.')
+            except (ValueError, RoutingError) as exc:
+                st.session_state.pop('planner_verified_key', None)
+                st.error(str(exc))
+            finally:
+                if router:
+                    router.close()
+        if api_key and st.session_state.get('planner_verified_key') == key_id:
+            st.caption('Key ini sudah lolos uji Geocoding dalam sesi ini.')
         st.caption('Koordinat dan waktu rute yang dihitung dikirim ke TomTom. Key tidak disertakan dalam ekspor skenario.')
 
     st.markdown('**1 · Rumah dan RS kandidat**')
     address = st.text_input('Alamat / nama lokasi rumah', key='planner_address', placeholder='Alamat lengkap untuk mencari lokasi')
     if st.button('Cari lokasi rumah', key='planner_geocode'):
+        st.session_state.pop('planner_geocodes', None)
         router = None
         try:
             router = TomTomHistoricalRouter(api_key)
             st.session_state['planner_geocodes'] = router.geocode(address)
+            st.session_state['planner_verified_key'] = key_id
         except (ValueError, RoutingError) as exc:
             st.error(str(exc))
         finally:

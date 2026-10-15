@@ -1,4 +1,4 @@
-﻿"""Explicit historical routing and school discovery; no fabricated travel times."""
+"""Explicit historical routing and school discovery; no fabricated travel times."""
 from __future__ import annotations
 
 from datetime import datetime
@@ -14,6 +14,16 @@ from src.planning.core import Place, Travel
 
 class RoutingError(RuntimeError):
     pass
+
+
+def normalize_api_key(value: str) -> str:
+    # Accept a copied key or a TOML assignment, without sending copy/paste
+    # artifacts (quotes, invisible characters, line wrapping) to the API.
+    value = value.strip().lstrip('\ufeff')
+    if value.startswith('TOMTOM_API_KEY') and '=' in value:
+        value = value.split('=', 1)[1].strip()
+    value = value.strip('"\'')
+    return re.sub(r'[\s\u200b\u200c\u200d\ufeff]+', '', value)
 
 
 class _RedactTomTomKey(logging.Filter):
@@ -35,7 +45,9 @@ class TomTomHistoricalRouter:
     def __init__(self, api_key: str, *, client=None, max_calls: int = 180):
         if not api_key or not api_key.strip():
             raise RoutingError('Hubungkan TomTom API key untuk menghitung waktu tempuh historis.')
-        self._key = api_key.strip()
+        self._key = normalize_api_key(api_key)
+        if not self._key:
+            raise RoutingError('API key TomTom masih kosong.')
         self._client = client or httpx.Client(timeout=15.0)
         self._owns_client = client is None
         self.max_calls = max_calls
@@ -51,6 +63,12 @@ class TomTomHistoricalRouter:
         self.calls += 1
         try:
             response = self._client.get(url, params={**params, 'key': self._key})
+            if response.status_code == 401:
+                raise RoutingError('TomTom menolak API key (401). Periksa key yang disalin atau key aktif di Streamlit Secrets. Ini bukan kesalahan alamat dan bukan tanda kuota habis.')
+            if response.status_code == 403:
+                raise RoutingError('Akses TomTom ditolak (403). Periksa izin Routing/Geocoding serta pembatasan key pada akun TomTom.')
+            if response.status_code == 429:
+                raise RoutingError('Batas pemakaian TomTom tercapai (429). Periksa kuota akun dan coba lagi nanti.')
             if response.status_code >= 400:
                 raise RoutingError(f'Layanan TomTom mengembalikan HTTP {response.status_code}. Periksa key, kuota, dan waktu rute.')
             return response.json()

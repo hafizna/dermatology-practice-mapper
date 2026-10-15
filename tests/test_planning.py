@@ -1,4 +1,4 @@
-﻿from datetime import date, datetime
+from datetime import date, datetime
 from dataclasses import replace
 import logging
 
@@ -192,3 +192,18 @@ def test_gap_suggestions_do_not_conflate_same_named_branches(in_memory_engine):
         rows=_gap_suggestions(in_memory_engine,hospitals,120)
         assert {row['RS'] for row in rows} == {f'RS Nama Sama [#{h.id}]' for h in hospitals}
         assert all(row['Status']=='Usulan' for row in rows)
+
+
+
+@pytest.mark.parametrize('copied', ['fixture-key', '  fixture-key  ', '"fixture-key"', "'fixture-key'", 'TOMTOM_API_KEY = "fixture-key"', 'fixture-\nkey', '\u200bfixture-key\ufeff'])
+def test_key_copy_artifacts_are_removed(copied):
+    from src.planning.services import normalize_api_key
+    assert normalize_api_key(copied)=='fixture-key'
+
+
+def test_401_is_reported_as_authentication_not_an_address_error():
+    with httpx.Client(transport=httpx.MockTransport(lambda request:httpx.Response(401))) as client:
+        api=TomTomHistoricalRouter('fixture-key',client=client)
+        with pytest.raises(RoutingError,match='menolak API key') as error:
+            api.geocode('Alamat contoh')
+        assert 'bukan kesalahan alamat' in str(error.value)
