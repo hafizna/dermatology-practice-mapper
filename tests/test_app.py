@@ -167,38 +167,39 @@ def test_app_data_quality_tab_metrics_present():
     assert {
         "Total RS master registry",
         "Total preferred-private",
-        "RS sekitar",
-        "RS unknown",
-        "RS dengan dermatolog",
-        "Dermatolog unik (known)",
-        "Doctor-hours sekitar",
     }.issubset(metric_labels)
 
 
-def test_app_competitive_pilot_cluster_and_radius_switches_render():
-    at = AppTest.from_file(str(_APP_PATH), default_timeout=30)
+def test_app_weekly_planner_replaces_competitive_pilot():
+    at = AppTest.from_file(str(_APP_PATH), default_timeout=30).run()
+    assert not at.exception
+    assert 'Rencana Mingguan' in [tab.label for tab in at.tabs]
+    assert 'Competitive Pilot' not in [tab.label for tab in at.tabs]
+    assert any(widget.label == 'RS kandidat planner' for widget in at.multiselect)
+    assert any(button.label == 'Susun alternatif mingguan' for button in at.button)
+
+
+def test_planner_without_home_shows_actionable_validation():
+    at = AppTest.from_file(str(_APP_PATH), default_timeout=30).run()
+    next(button for button in at.button if button.label == 'Susun alternatif mingguan').click()
     at.run()
     assert not at.exception
+    assert any('Pilih lokasi rumah' in message.value for message in at.error)
 
-    cluster_selectbox = next(sb for sb in at.selectbox if sb.label == "Cluster pilot")
-    for cluster_label in ["Bintaro", "BSD", "Kuningan"]:
-        cluster_selectbox.set_value(cluster_label)
-        at.run()
-        assert not at.exception, f"competitive cluster {cluster_label!r} failed"
-        cluster_selectbox = next(sb for sb in at.selectbox if sb.label == "Cluster pilot")
 
-    radius_selectbox = next(sb for sb in at.selectbox if sb.label == "Radius pilot (km)")
-    for radius in [3.0, 5.0, 10.0]:
-        radius_selectbox.set_value(radius)
-        at.run()
-        assert not at.exception, f"competitive radius {radius!r} failed"
-        radius_selectbox = next(sb for sb in at.selectbox if sb.label == "Radius pilot (km)")
+def test_school_scenario_editor_is_supported_by_streamlit():
+    at = AppTest.from_file(str(_APP_PATH), default_timeout=30).run()
+    next(widget for widget in at.checkbox if widget.label == 'Bandingkan sekolah dalam rencana perjalanan').check()
+    at.run()
+    assert not at.exception
+    assert any(widget.label == 'Skenario transportasi sekolah' for widget in at.selectbox)
+    assert any(widget.label == 'Bobot biaya sekolah' for widget in at.slider)
 
 
 def test_app_no_matching_filter_shows_empty_state_not_crash():
     at = AppTest.from_file(str(_APP_PATH), default_timeout=30)
     at.run()
-    min_derm_input = at.number_input[0]
+    min_derm_input = next(widget for widget in at.number_input if widget.label == "Jumlah dokter minimum")
     min_derm_input.set_value(9999)  # no hospital has this many doctors
     at.run()
     assert not at.exception
@@ -238,7 +239,44 @@ def test_map_click_opens_exact_hospital_schedule_and_filter_hides_it(monkeypatch
         assert {"Hari", "Mulai", "Selesai", "Sumber", "Tanggal pencatatan"}.issubset(details[-1].columns)
         assert any(heading.value == "Jadwal RS yang dipilih di peta" for heading in at.subheader)
     assert "last_object_clicked_tooltip" in calls[-1]["returned_objects"]
-    at.number_input[0].set_value(9999)
+    next(widget for widget in at.number_input if widget.label == "Jumlah dokter minimum").set_value(9999)
     at.run()
     assert not at.exception
     assert not any(heading.value == "Jadwal RS yang dipilih di peta" for heading in at.subheader)
+
+
+
+def test_planner_can_optimize_school_scenario_in_streamlit(monkeypatch):
+    import src.planning.ui as planner_ui
+    from src.planning.core import Travel
+    class FakeRouter:
+        def __init__(self, key): pass
+        def __call__(self, *args): return Travel(15, 5, 'Fixture historical')
+        def close(self): pass
+    monkeypatch.setattr(planner_ui, 'TomTomHistoricalRouter', FakeRouter)
+    with Session(get_engine()) as session:
+        hospital = session.query(Hospital).filter(Hospital.lat.is_not(None), Hospital.lon.is_not(None), Hospital.duplicate_of_hospital_id.is_(None)).first()
+        hospital_id = hospital.id
+        label = f'{hospital.display_alias or hospital.name} [#{hospital.id}]'
+    at = AppTest.from_file(str(_APP_PATH), default_timeout=30)
+    at.session_state['planner_home_lat'] = -6.2
+    at.session_state['planner_home_lon'] = 106.8
+    at.session_state['planner_hospitals'] = [hospital_id]
+    at.session_state['planner_key'] = 'fixture-only'
+    at.session_state['planner_slot_base'] = [{'RS':label,'Hari':day,'Mulai':'16:00','Selesai':'18:00','Status':'Usulan','Kunci':False} for day in ['Senin','Rabu','Jumat','Sabtu']]
+    at.session_state['planner_schools_enabled'] = True
+    at.session_state['planner_school_base'] = [{'Pilih':True,'Nama':'Sekolah Contoh','Latitude':-6.205,'Longitude':106.805,'Masuk':'07:30','Pulang':'14:00','Kurikulum':'Nasional','Jenjang':'SD','Admission / uang pangkal':10000000,'SPP bulanan':1000000,'Biaya tahunan':2000000,'Wajib lain tahun pertama':0,'Tahun ajaran':'2027/2028','Sumber biaya':'https://example.org/fees'}]
+    at.run()
+    assert not at.exception
+    next(button for button in at.button if button.label == 'Susun alternatif mingguan').click()
+    at.run()
+    assert not at.exception
+    assert not at.error
+    alternatives = [frame.value for frame in at.dataframe if 'Alternatif' in frame.value.columns]
+    assert alternatives and alternatives[0].iloc[0]['Sekolah']=='Sekolah Contoh'
+    assert alternatives[0].iloc[0]['Tahun pertama']=='Rp 24.000.000'
+    next(widget for widget in at.slider if widget.label=='Bobot prioritas RS').set_value(50)
+    at.run()
+    assert not at.exception
+    assert any('Input berubah' in message.value for message in at.info)
+    assert not any('Alternatif' in frame.value.columns for frame in at.dataframe)

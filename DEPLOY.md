@@ -66,3 +66,20 @@ Cek di log app (share.streamlit.io → app ini → "Manage app" → lihat log):
 - `scripts/publish_database_release.py` — upload database ke Release
   (pakai `gh` CLI, harus sudah `gh auth login`)
 - `.streamlit/secrets.toml.example` — daftar field secrets yang dibutuhkan
+
+### Planner mingguan di Streamlit
+
+Competitive Pilot diganti tab Rencana Mingguan. Tambahkan `TOMTOM_API_KEY`
+ke Secrets jika estimasi historis dan pencarian alamat ingin diaktifkan.
+Provider memerlukan akses Routing + Geocoding; kuota/billing mengikuti
+akun TomTom. Tanpa key, input skenario dan pembobotan tetap tersedia,
+namun app tidak mengarang waktu perjalanan. Pencarian lokasi sekolah
+menggunakan sumber Overpass yang sudah dikonfigurasi di sources.yaml.
+
+Setiap optimasi dibatasi 16 kandidat sesi, 5 kandidat sekolah, 25.000
+kombinasi dan 180 panggilan provider. Jika batas rute tercapai, hasil
+parsial tidak ditampilkan sebagai solusi final; pengguna diminta
+mengurangi kandidat atau mengunci slot. Lokasi rumah dan hasil rute
+hanya bertahan pada sesi Streamlit; ekspor JSON/CSV dilakukan oleh
+pengguna dan tidak memuat key. Perubahan fitur membutuhkan deployment
+kode aplikasi, bukan unggahan database Release saja.

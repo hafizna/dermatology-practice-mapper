@@ -20,7 +20,7 @@ rapidfuzz>=3.9
 
 # Map / UI
 folium>=0.17
-streamlit>=1.37
+streamlit>=1.49,<2
 streamlit-folium>=0.23
 
 # CLI / logging

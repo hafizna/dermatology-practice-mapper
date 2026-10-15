@@ -94,3 +94,26 @@ pytest
 
 Parser diuji offline dengan fixture yang dianonimkan — tidak ada network
 call di test suite.
+
+## Rencana Mingguan (pengganti Competitive Pilot)
+
+Planner memakai Streamlit >=1.49,<2. Pilih rumah di peta/koordinat atau cari
+alamat; pilih RS, prioritas, kandidat sesi, dan slot terkunci. Optimizer
+membandingkan kombinasi sesi menurut batas perjalanan, hari/jam praktik,
+buffer, dan bobot pilihan pengguna. Celah jadwal RS hanyalah usulan untuk
+dikonfirmasi, bukan bukti lowongan praktik.
+
+Kandidat sekolah bersifat skenario masa depan. Lokasi dapat dicari di
+OpenStreetMap atau diisi manual; kurikulum, jenjang, jam, tahun ajaran,
+dan sumber biaya diisi dari informasi sekolah. Biaya kosong bukan nol.
+Tahun pertama dan biaya rutin tahun berikutnya dihitung terpisah; biaya
+belum lengkap tidak boleh lolos batas anggaran atau mendapat peringkat
+berbasis biaya. Kalender dan perjalanan alternatif dapat ditinjau, dan
+input skenario dapat diekspor sebagai JSON tanpa API key.
+
+Set `TOMTOM_API_KEY` di environment atau Streamlit Secrets (atau isi key
+sementara dalam sesi) untuk geocoding dan waktu tempuh mobil berbasis
+historis menurut hari/jam. Tidak ada fallback waktu tempuh buatan jika
+API tidak tersedia. Rumah/sekolah pribadi tidak ditulis ke database RS.
+Pencarian dan optimasi hanya berjalan saat tombolnya ditekan. Pengujian
+rute memakai respons API terkontrol; uji rute nyata memerlukan key aktif.
